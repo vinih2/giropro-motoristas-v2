@@ -1,7 +1,0 @@
-{
-  "/api/generate-insight/route": "app/api/generate-insight/route.js",
-  "/api/weather/route": "app/api/weather/route.js",
-  "/custo-km/page": "app/custo-km/page.js",
-  "/insights/page": "app/insights/page.js",
-  "/page": "app/page.js"
-}
