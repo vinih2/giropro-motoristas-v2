@@ -1,120 +1,190 @@
+// src/app/custo-km/page.tsx
 'use client';
 
 import { useState } from 'react';
 import { TipoVeiculo } from '@/lib/types';
 import { calcularCustoPorKm, formatarMoeda } from '@/lib/calculations';
-import { Fuel, Zap, TrendingDown, AlertCircle, Download } from 'lucide-react';
-import FipeCalculator from '@/components/FipeCalculator';
+import { 
+    Fuel, Zap, TrendingDown, Car, Gauge, Plug, Leaf, BatteryCharging 
+} from 'lucide-react';
+import FipeCalculator from '@/components/FipeCalculator'; 
+import FeatureButtonGroup from '@/components/FeatureButtonGroup';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import ProtectedRoute from '@/components/ProtectedRoute';
+import { cn } from '@/lib/utils';
 
-export default function CustoKm() {
+function CustoKmContent() {
   const [tipoVeiculo, setTipoVeiculo] = useState<TipoVeiculo>('Carro Flex');
   const [consumo, setConsumo] = useState('');
   const [preco, setPreco] = useState('');
-  const [km, setKm] = useState('');
   const [resultado, setResultado] = useState<any>(null);
-  const [insight, setInsight] = useState('');
-  const [loadingAPI, setLoadingAPI] = useState(false);
 
   const tiposVeiculo: TipoVeiculo[] = ['Carro Flex', 'Moto', 'Elétrico', 'Diesel'];
+  const isEletrico = tipoVeiculo === 'Elétrico';
 
-  const buscarPrecosCombustivel = async () => {
-    setLoadingAPI(true);
-    try {
-      // Simulação de API (futura integração com ANP)
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      const precosSimulados = {
-        gasolina: (5.50 + Math.random() * 0.50).toFixed(2),
-        etanol: (3.80 + Math.random() * 0.40).toFixed(2),
-        diesel: (5.80 + Math.random() * 0.30).toFixed(2),
-      };
-
-      if (tipoVeiculo === 'Carro Flex') {
-        setPreco(precosSimulados.gasolina);
-        alert(`✅ Preços atualizados!\n\nGasolina: R$ ${precosSimulados.gasolina}\nEtanol: R$ ${precosSimulados.etanol}`);
-      } else if (tipoVeiculo === 'Diesel') {
-        setPreco(precosSimulados.diesel);
-        alert(`✅ Preço do diesel atualizado: R$ ${precosSimulados.diesel}`);
-      } else if (tipoVeiculo === 'Moto') {
-        setPreco(precosSimulados.gasolina);
-        alert(`✅ Preço da gasolina atualizado: R$ ${precosSimulados.gasolina}`);
-      } else {
-        alert('⚠️ Busca de preços indisponível para veículos elétricos.');
-      }
-    } catch (error) {
-      alert('❌ Erro ao buscar preços.');
-    } finally {
-      setLoadingAPI(false);
-    }
+  // Configuração Dinâmica de Tema (Cores e Ícones)
+  const theme = isEletrico ? {
+      gradient: 'from-emerald-400 to-cyan-500',
+      text: 'text-emerald-600 dark:text-emerald-400',
+      bgIcon: 'text-emerald-400',
+      button: 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20',
+      inputRing: 'focus:ring-emerald-500/20',
+      labelInput1: 'Eficiência (km/kWh)',
+      labelInput2: 'Custo Energia (R$/kWh)',
+      placeholder1: 'Ex: 6.5', // BYD Dolphin faz ~6.5
+      placeholder2: 'Ex: 0.80', // Custo residencial médio
+      icon1: Zap,
+      icon2: Plug,
+      heroIcon: Leaf
+  } : {
+      gradient: 'from-blue-500 to-cyan-500',
+      text: 'text-blue-600 dark:text-blue-400',
+      bgIcon: 'text-blue-400',
+      button: 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20',
+      inputRing: 'focus:ring-blue-500/20',
+      labelInput1: 'Consumo (Km/L)',
+      labelInput2: 'Preço Combustível (R$)',
+      placeholder1: 'Ex: 10.5',
+      placeholder2: 'Ex: 5.49',
+      icon1: Gauge,
+      icon2: Fuel,
+      heroIcon: Car
   };
 
   const handleCalcular = () => {
     const c = parseFloat(consumo);
     const p = parseFloat(preco);
-    const k = parseFloat(km || '0');
-
-    if (!c || !p) return alert('⚠️ Preencha consumo e preço!');
+    if (!c || !p) return;
 
     const calc = calcularCustoPorKm({
-      tipoVeiculo,
-      consumoMedio: c,
-      precoCombustivel: p,
-      kmRodados: k,
+      tipoVeiculo, consumoMedio: c, precoCombustivel: p, kmRodados: 0 
     });
     setResultado(calc);
-
+    
     if (typeof window !== 'undefined') {
-      localStorage.setItem('custoPorKm', calc.custoPorKm.toFixed(2));
+        localStorage.setItem('custoPorKm', calc.custoPorKm.toFixed(2));
     }
-
-    let insightTexto = `Seu custo por km é ${formatarMoeda(calc.custoPorKm)}. `;
-    if (k > 0) insightTexto += `Gasto total hoje: ${formatarMoeda(calc.custoDiario)}.`;
-    if (calc.comparacaoFlex) insightTexto += ` Melhor opção: ${calc.comparacaoFlex.melhorOpcao}.`;
-
-    setInsight(insightTexto);
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
-      <div className="text-center">
-        <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-2xl mb-4 shadow-lg">
-          <Fuel className="w-8 h-8 text-white" />
+    <div className="min-h-screen bg-zinc-50 dark:bg-black pb-32 pt-8 px-4 font-sans transition-colors duration-500">
+      <div className="max-w-2xl mx-auto space-y-8">
+        
+        <div className="text-center space-y-2">
+            <div className={cn("mx-auto w-16 h-16 rounded-2xl flex items-center justify-center mb-4 shadow-lg transition-all duration-500 bg-gradient-to-br", theme.gradient)}>
+                <theme.heroIcon className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-3xl font-black text-zinc-900 dark:text-white tracking-tight">Custo Real</h1>
+            <p className="text-zinc-500 font-medium">
+                {isEletrico ? 'Cálculo de eficiência energética' : 'Quanto seu carro gasta por KM?'}
+            </p>
         </div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Calculadora de Custo por KM</h1>
-        <p className="text-gray-600 dark:text-gray-300">Combustível + Depreciação</p>
+
+        {/* CARD CALCULADORA */}
+        <Card className="border-0 shadow-xl bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden ring-1 ring-zinc-100 dark:ring-zinc-800">
+            <div className={cn("h-2 bg-gradient-to-r transition-all duration-500", theme.gradient)}></div>
+            <CardContent className="p-8 space-y-8">
+                
+                {/* Seletor */}
+                <FeatureButtonGroup
+                    label="Seu Veículo"
+                    options={tiposVeiculo}
+                    selected={tipoVeiculo}
+                    onSelect={setTipoVeiculo}
+                    colorClass={isEletrico ? "bg-emerald-600 text-white shadow-md" : "bg-blue-600 text-white shadow-md"}
+                />
+
+                {/* Inputs Gigantes e Dinâmicos */}
+                <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">{theme.labelInput1}</label>
+                        <div className="relative group">
+                            <theme.icon1 className={cn("absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors", theme.bgIcon)}/>
+                            <Input 
+                                type="number" placeholder={theme.placeholder1} 
+                                value={consumo} onChange={e => setConsumo(e.target.value)}
+                                className={cn("pl-12 h-16 text-2xl font-black rounded-2xl bg-zinc-50 dark:bg-black border-transparent focus:bg-white transition-all focus:ring-2", theme.inputRing)}
+                            />
+                        </div>
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">{theme.labelInput2}</label>
+                        <div className="relative group">
+                            <theme.icon2 className={cn("absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors", theme.bgIcon)}/>
+                            <Input 
+                                type="number" placeholder={theme.placeholder2} 
+                                value={preco} onChange={e => setPreco(e.target.value)}
+                                className={cn("pl-12 h-16 text-2xl font-black rounded-2xl bg-zinc-50 dark:bg-black border-transparent focus:bg-white transition-all focus:ring-2", theme.inputRing)}
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <Button onClick={handleCalcular} className={cn("w-full h-14 text-lg font-bold text-white rounded-2xl shadow-lg active:scale-95 transition-all", theme.button)}>
+                    {isEletrico ? 'Calcular Energia' : 'Calcular Custo'}
+                </Button>
+                
+                {/* Resultado */}
+                {resultado && (
+                    <div className="animate-in slide-in-from-top-4 fade-in duration-500">
+                        <div className={cn("p-6 rounded-2xl text-center relative overflow-hidden border bg-opacity-10", isEletrico ? "bg-emerald-50 border-emerald-100 dark:bg-emerald-900/20 dark:border-emerald-800" : "bg-blue-50 border-blue-100 dark:bg-blue-900/20 dark:border-blue-800")}>
+                            <div className="relative z-10">
+                                <p className={cn("text-xs font-bold uppercase tracking-widest mb-1", theme.text)}>
+                                    {isEletrico ? 'Custo por KM (Energia)' : 'Custo por KM (Combustível)'}
+                                </p>
+                                <div className={cn("flex items-center justify-center gap-1", theme.text)}>
+                                    <span className="text-5xl font-black tracking-tighter">{formatarMoeda(resultado.custoPorKm)}</span>
+                                    <span className="text-lg font-bold opacity-60">/ km</span>
+                                </div>
+                                
+                                {/* Dica Extra para Elétrico */}
+                                {isEletrico && (
+                                    <div className="mt-3 pt-3 border-t border-emerald-200 dark:border-emerald-800/50 flex items-center justify-center gap-2 text-emerald-700 dark:text-emerald-300 text-sm font-medium">
+                                        <BatteryCharging className="w-4 h-4" /> 
+                                        Economia de ~70% vs Gasolina
+                                    </div>
+                                )}
+
+                                {resultado.comparacaoFlex && (
+                                    <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-800/50">
+                                        <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                                            Melhor opção hoje: <strong>{resultado.comparacaoFlex.melhorOpcao}</strong>
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                            
+                            {/* Background Icon */}
+                            <TrendingDown className={cn("absolute -right-4 -bottom-4 w-32 h-32 opacity-5 z-0", isEletrico ? "text-emerald-500" : "text-blue-500")} />
+                        </div>
+                        <p className="text-center text-[10px] text-zinc-400 mt-3 uppercase font-bold tracking-wide">
+                            *Valor salvo para cálculos do dashboard.
+                        </p>
+                    </div>
+                )}
+
+            </CardContent>
+        </Card>
+
+        {/* COMPONENTE FIPE */}
+        <div className="pt-4">
+            <div className="flex items-center gap-3 mb-4 px-2">
+                <div className="bg-zinc-100 dark:bg-zinc-800 p-2 rounded-lg"><Car className="w-5 h-5 text-zinc-500 dark:text-zinc-400"/></div>
+                <div>
+                    <h2 className="font-bold text-lg text-zinc-900 dark:text-white leading-none">Depreciação</h2>
+                    <p className="text-xs text-zinc-500 font-medium">Custo invisível do carro (FIPE)</p>
+                </div>
+            </div>
+            <FipeCalculator />
+        </div>
+
       </div>
-
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-6 border border-gray-100 dark:border-gray-800">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-5 flex items-center gap-2"><Zap className="w-5 h-5 text-blue-600" /> Entradas</h2>
-        <div className="space-y-5">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            {tiposVeiculo.map((t) => (
-              <button key={t} onClick={() => setTipoVeiculo(t)} className={`px-4 py-3 rounded-xl font-semibold transition-all ${tipoVeiculo === t ? 'bg-gradient-to-r from-blue-500 to-cyan-600 text-white shadow-lg' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'}`}>{t}</button>
-            ))}
-          </div>
-          <input type="number" step="0.1" value={consumo} onChange={(e) => setConsumo(e.target.value)} placeholder="Consumo Médio (km/L)" className="w-full px-5 py-4 text-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-xl" />
-          <div className="flex gap-2">
-            <input type="number" step="0.01" value={preco} onChange={(e) => setPreco(e.target.value)} placeholder="Preço Combustível (R$)" className="flex-1 px-5 py-4 text-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-xl" />
-            <button onClick={buscarPrecosCombustivel} disabled={loadingAPI} className="px-6 py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold rounded-xl hover:from-green-600 hover:to-emerald-700 flex items-center gap-2"><Download className="w-5 h-5" /> <span className="hidden md:inline">Buscar</span></button>
-          </div>
-          <button onClick={handleCalcular} className="w-full bg-gradient-to-r from-blue-500 to-cyan-600 text-white font-bold py-5 text-xl rounded-xl hover:from-blue-600 hover:to-cyan-700">🚀 Calcular Custo</button>
-        </div>
-      </div>
-
-      {resultado && (
-        <div className="space-y-4 animate-fade-in">
-          <div className="bg-gradient-to-br from-red-500 to-pink-600 rounded-2xl shadow-xl p-6 text-center">
-            <p className="text-sm text-white/90 font-medium mb-1">Custo por KM (Combustível)</p>
-            <p className="text-5xl font-bold text-white">{formatarMoeda(resultado.custoPorKm)}</p>
-          </div>
-          <div className="bg-gradient-to-r from-blue-100 to-cyan-100 dark:from-blue-900/30 dark:to-cyan-900/30 rounded-2xl shadow-xl p-6 border-2 border-blue-300 dark:border-blue-700 flex items-start gap-4">
-            <AlertCircle className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-            <p className="text-gray-800 dark:text-gray-200 font-medium">{insight}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Componente FIPE com todas as correções */}
-      <FipeCalculator />
     </div>
   );
+}
+
+export default function CustoKm() {
+  return <ProtectedRoute><CustoKmContent /></ProtectedRoute>;
 }

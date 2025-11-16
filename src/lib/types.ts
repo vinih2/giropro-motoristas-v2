@@ -1,20 +1,5 @@
-// Tipos do GiroPro
-
-export type Plataforma = 
-  | 'Uber' 
-  | '99' 
-  | 'iFood' 
-  | 'Rappi' 
-  | 'Shopee' 
-  | 'Amazon' 
-  | 'Loggi' 
-  | 'Outro';
-
-export type TipoVeiculo = 
-  | 'Carro Flex' 
-  | 'Moto' 
-  | 'Elétrico' 
-  | 'Diesel';
+export type TipoVeiculo = 'Carro Flex' | 'Moto' | 'Elétrico' | 'Diesel';
+export type Plataforma = 'Uber' | '99' | 'iFood' | 'Rappi' | 'Shopee' | 'Amazon' | 'Loggi' | 'Outro';
 
 export interface DadosDia {
   plataforma: Plataforma;
@@ -32,8 +17,8 @@ export interface ResultadoDia {
 
 export interface DadosCusto {
   tipoVeiculo: TipoVeiculo;
-  consumoMedio: number;
-  precoCombustivel: number;
+  consumoMedio: number; // Para combustão (km/l) ou elétrico (km/kWh)
+  precoCombustivel: number; // Para combustão (R$/l) ou elétrico (R$/kWh)
   kmRodados: number;
 }
 
@@ -43,23 +28,6 @@ export interface ResultadoCusto {
   comparacaoFlex?: {
     gasolina: number;
     etanol: number;
-    melhorOpcao: string;
+    melhorOpcao: 'Gasolina' | 'Etanol';
   };
-}
-
-export interface DadosInsights {
-  cidade: string;
-  plataforma: Plataforma;
-  horarioTrabalho: string;
-}
-
-export interface DadosSimulador {
-  ganhoDiarioMedio: number;
-  diasPorSemana: number;
-  custoDiarioMedio: number;
-}
-
-export interface ResultadoSimulador {
-  lucroSemanal: number;
-  lucroMensal: number;
 }

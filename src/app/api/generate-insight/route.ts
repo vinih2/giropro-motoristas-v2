@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
           { role: "user", content: prompt || "Me dê uma dica rápida sobre meu desempenho hoje." }
         ],
         temperature: 0.7,
-        max_tokens: 400,
+        max_tokens: 800, // <--- AUMENTADO PARA 800 TOKENS (MAIOR DETALHAMENTO)
       });
 
       return NextResponse.json({ insight: completion.choices[0].message.content });

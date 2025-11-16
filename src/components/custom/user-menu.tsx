@@ -1,68 +1,91 @@
-'use client';
+"use client";
 
-import { useAuth } from '@/hooks/useAuth';
-import { LogOut, User, Settings, FileText, Download } from 'lucide-react';
-import Image from 'next/image';
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { supabase } from '@/lib/supabase';
+import { useAuth } from "@/hooks/useAuth";
+import { CreditCard, LogOut, Settings, User as UserIcon, Wrench } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { authService } from "@/services/authService"; // Importa o serviço de auth
 
 export default function UserMenu() {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
+  const router = useRouter();
 
-  if (!user) return null;
+  // Função de Logout Corrigida
+  const handleSignOut = async () => {
+    const { error } = await authService.signOut();
+    if (error) {
+      toast.error("Erro ao fazer logout.");
+    } else {
+      // MUDANÇA AQUI: Redireciona para a raiz (Landing Page)
+      router.push("/");
+      router.refresh(); // Força a atualização do layout
+    }
+  };
 
-  const userName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Usuário';
-  const userPhoto = user.user_metadata?.avatar_url || user.user_metadata?.picture;
-
-  const handleExport = async () => {
-    // Função simples de exportação CSV
-    const { data } = await supabase.from('registros').select('*').eq('user_id', user.id);
-    if (!data) return alert('Sem dados para exportar');
-
-    const csvContent = "data:text/csv;charset=utf-8," 
-        + "Data,Plataforma,Lucro,KM,Horas\n"
-        + data.map(r => `${r.data},${r.plataforma},${r.lucro},${r.km},${r.horas}`).join("\n");
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "giropro_relatorio.csv");
-    document.body.appendChild(link);
-    link.click();
+  // Função de atalho para a Garagem
+  const goToGarage = () => {
+    router.push('/manutencao');
   };
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="outline-none">
-        <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition">
-          {userPhoto ? (
-            <Image src={userPhoto} alt={userName} width={40} height={40} className="rounded-full border-2 border-orange-500" />
-          ) : (
-            <div className="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center text-white">
-              <User size={20} />
-            </div>
-          )}
-        </div>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          className="relative h-10 w-10 rounded-full border border-gray-200 dark:border-gray-800"
+        >
+          <Avatar className="h-10 w-10">
+            <AvatarImage
+              src={user?.user_metadata?.avatar_url || ""}
+              alt={user?.user_metadata?.full_name || "Avatar"}
+            />
+            <AvatarFallback>
+              {user?.email ? user.email[0].toUpperCase() : "G"}
+            </AvatarFallback>
+          </Avatar>
+        </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
+      <DropdownMenuContent className="w-56" align="end" forceMount>
+        <DropdownMenuLabel className="font-normal">
+          <div className="flex flex-col space-y-1">
+            <p className="text-sm font-medium leading-none">
+              {user?.user_metadata?.full_name || "Motorista Pro"}
+            </p>
+            <p className="text-xs leading-none text-muted-foreground">
+              {user?.email}
+            </p>
+          </div>
+        </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem className="cursor-pointer">
-            <Settings className="mr-2 h-4 w-4" /> Configurações
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={handleExport} className="cursor-pointer">
-            <Download className="mr-2 h-4 w-4" /> Exportar Relatório (CSV)
-        </DropdownMenuItem>
+        <DropdownMenuGroup>
+          <DropdownMenuItem onClick={() => router.push('/giropro-plus')} className="cursor-pointer">
+            <CreditCard className="mr-2 h-4 w-4 text-orange-500" />
+            <span>Meu Plano (PRO)</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={goToGarage} className="cursor-pointer">
+            <Wrench className="mr-2 h-4 w-4" />
+            <span>GiroGarage</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled>
+            <Settings className="mr-2 h-4 w-4" />
+            <span>Configurações</span>
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={signOut} className="text-red-600 cursor-pointer">
-            <LogOut className="mr-2 h-4 w-4" /> Sair
+        <DropdownMenuItem onClick={handleSignOut} className="text-red-500 cursor-pointer focus:bg-red-50 focus:text-red-600">
+          <LogOut className="mr-2 h-4 w-4" />
+          <span>Sair</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

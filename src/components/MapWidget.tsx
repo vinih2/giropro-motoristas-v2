@@ -1,16 +1,38 @@
+// src/components/MapWidget.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Circle, useMap } from 'react-leaflet';
+import { useEffect, useState, useMemo } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server'; 
+import { MapContainer, TileLayer, Circle, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+import { Fuel, ThumbsUp } from 'lucide-react';
+import GiroService from '@/services/giroService'; 
+
+// --- ÍCONE DINÂMICO (SEM ARQUIVO PNG) ---
+const fuelIconSvg = renderToStaticMarkup(
+  <div className="relative flex items-center justify-center w-8 h-8">
+    <div className="absolute w-full h-full bg-orange-500 rounded-full opacity-30 animate-ping"></div>
+    <div className="relative z-10 w-6 h-6 bg-orange-600 border-2 border-white rounded-full shadow-lg flex items-center justify-center text-white">
+      <Fuel size={12} />
+    </div>
+  </div>
+);
+
+const customIcon = L.divIcon({
+  html: fuelIconSvg,
+  className: 'bg-transparent',
+  iconSize: [32, 32],
+  iconAnchor: [16, 16],
+  popupAnchor: [0, -16],
+});
 
 function ChangeView({ center }: { center: [number, number] }) {
   const map = useMap();
-  map.setView(center, 12);
+  map.setView(center, 13);
   return null;
 }
 
-// Coordenadas das principais cidades (para centrar o mapa)
 const COORDENADAS: Record<string, [number, number]> = {
   'São Paulo': [-23.5505, -46.6333],
   'Rio de Janeiro': [-22.9068, -43.1729],
@@ -44,18 +66,48 @@ interface MapWidgetProps {
   cidade: string;
 }
 
+interface CombustivelMarker {
+    id?: string;
+    posto_nome: string;
+    latitude: number;
+    longitude: number;
+    preco: number;
+    tipo_combustivel: string;
+    upvotes?: number;
+    data_reporte?: string;
+}
+
 export default function MapWidget({ cidade }: MapWidgetProps) {
   const [isMounted, setIsMounted] = useState(false);
-  const center = COORDENADAS[cidade] || COORDENADAS['São Paulo'];
+  const [precos, setPrecos] = useState<CombustivelMarker[]>([]);
+  const center: [number, number] = useMemo(() => COORDENADAS[cidade] || COORDENADAS['São Paulo'], [cidade]);
 
   useEffect(() => {
     setIsMounted(true);
-  }, []);
+    
+    const carregarPrecos = async () => {
+        console.log("🗺️ Buscando preços no mapa...");
+        const { data, error } = await GiroService.fetchPrecosProximos();
+        
+        if (error) {
+            console.error("❌ Erro ao buscar preços:", error);
+        }
+
+        if (data && data.length > 0) {
+            console.log(`✅ Encontrados ${data.length} preços.`);
+            setPrecos(data as unknown as CombustivelMarker[]);
+        } else {
+            console.log("⚠️ Nenhum preço encontrado no banco.");
+        }
+    };
+    
+    carregarPrecos();
+  }, [cidade]);
 
   if (!isMounted) {
     return (
       <div className="h-72 w-full bg-gray-100 dark:bg-gray-800 rounded-2xl animate-pulse flex items-center justify-center text-gray-400">
-        Carregando Mapa...
+        <span className="flex items-center gap-2"><Fuel className="animate-bounce" /> Carregando Mapa...</span>
       </div>
     );
   }
@@ -64,7 +116,7 @@ export default function MapWidget({ cidade }: MapWidgetProps) {
     <div className="h-72 w-full rounded-2xl overflow-hidden shadow-lg border-2 border-gray-100 dark:border-gray-800 relative z-0">
       <MapContainer 
         center={center} 
-        zoom={12} 
+        zoom={13} 
         style={{ height: '100%', width: '100%' }} 
         zoomControl={false}
       >
@@ -74,14 +126,48 @@ export default function MapWidget({ cidade }: MapWidgetProps) {
         />
         <ChangeView center={center} />
 
-        {/* Simulação de Áreas de Demanda */}
-        <Circle center={[center[0] + 0.01, center[1] - 0.01]} radius={1500} pathOptions={{ color: 'transparent', fillColor: '#ef4444', fillOpacity: 0.4 }} />
-        <Circle center={[center[0] - 0.02, center[1] + 0.02]} radius={1000} pathOptions={{ color: 'transparent', fillColor: '#f97316', fillOpacity: 0.4 }} />
-        <Circle center={[center[0] + 0.02, center[1] + 0.02]} radius={1200} pathOptions={{ color: 'transparent', fillColor: '#eab308', fillOpacity: 0.4 }} />
+        {precos.map((p, index) => (
+            <Marker 
+                key={index} 
+                position={[p.latitude, p.longitude]} 
+                icon={customIcon}
+            >
+                <Popup className="rounded-xl">
+                    <div className="p-1 font-sans min-w-[150px]">
+                        <h4 className="font-bold text-gray-900 text-sm mb-1">{p.posto_nome}</h4>
+                        
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-2 mb-2">
+                            <p className="text-lg font-black text-green-700 flex items-center gap-1">
+                                <span className="text-xs font-normal text-green-600">R$</span>
+                                {Number(p.preco).toFixed(2)}
+                            </p>
+                            <p className="text-[10px] uppercase font-bold text-green-600 tracking-wider">
+                                {p.tipo_combustivel}
+                            </p>
+                        </div>
+
+                        <div className="flex justify-between items-center text-xs text-gray-500 border-t pt-2">
+                            <span className="flex items-center gap-1">
+                                <ThumbsUp className="w-3 h-3 text-blue-500" /> {p.upvotes || 0}
+                            </span>
+                            <span className="text-[10px]">
+                                {p.data_reporte ? new Date(p.data_reporte).toLocaleDateString() : 'Hoje'}
+                            </span>
+                        </div>
+                    </div>
+                </Popup>
+            </Marker>
+        ))}
+
+        <Circle center={center} radius={2000} pathOptions={{ color: 'transparent', fillColor: '#3b82f6', fillOpacity: 0.1 }} />
       </MapContainer>
       
-      <div className="absolute bottom-2 right-2 bg-white/90 dark:bg-black/80 px-3 py-1 rounded-lg text-xs font-bold shadow-md z-[400] text-gray-800 dark:text-white">
-        🔥 Áreas de Demanda
+      {/* MUDANÇA AQUI: Texto mais engajador */}
+      <div className="absolute top-2 right-2 bg-white/90 dark:bg-black/80 px-3 py-1.5 rounded-lg shadow-md z-[400] backdrop-blur-sm border border-gray-200 dark:border-gray-700">
+        <p className="text-xs font-bold text-gray-800 dark:text-white flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></span>
+            Preços dos Parceiros 🤝
+        </p>
       </div>
     </div>
   );

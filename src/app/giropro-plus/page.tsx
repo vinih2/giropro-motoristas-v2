@@ -1,267 +1,191 @@
+// src/app/giropro-plus/page.tsx
 'use client';
 
-import { Crown, Zap, TrendingUp, BarChart3, MapPin, Fuel, Bell, Check, Clock } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { 
+  Check, Crown, Zap, FileText, ShieldCheck, 
+  History, Wrench, ChevronRight 
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { toast } from 'sonner';
+import { useAuth } from '@/hooks/useAuth';
+import GiroDataService from '@/services/giroService';
+import { useRouter } from 'next/navigation';
+import ProtectedRoute from '@/components/ProtectedRoute';
 
-export default function GiroProPlus() {
-  const recursos = [
-    {
-      icon: Clock,
-      titulo: 'Horários Personalizados (IA)',
-      descricao: 'Recomendações de horários baseadas no seu histórico e padrões de demanda da sua região'
-    },
-    {
-      icon: BarChart3,
-      titulo: 'Análise Avançada do Estilo de Trabalho',
-      descricao: 'Entenda seu perfil de trabalho e receba insights personalizados para otimizar seus ganhos'
-    },
-    {
-      icon: TrendingUp,
-      titulo: 'Relatório Semanal Completo',
-      descricao: 'Relatórios detalhados com gráficos, tendências e comparativos automáticos'
-    },
-    {
-      icon: Zap,
-      titulo: 'Comparação Automática Semana/Semana',
-      descricao: 'Acompanhe sua evolução com comparativos automáticos e identifique oportunidades'
-    },
-    {
-      icon: MapPin,
-      titulo: 'Melhores Regiões do Dia',
-      descricao: 'Descubra em tempo real as regiões com maior demanda e melhores ganhos'
-    },
-    {
-      icon: Fuel,
-      titulo: 'Sugestão Avançada Gasolina x Etanol',
-      descricao: 'Análise inteligente considerando preços, consumo e rotas para máxima economia'
-    },
-    {
-      icon: Bell,
-      titulo: 'Alertas Inteligentes Personalizados',
-      descricao: 'Notificações sobre horários de pico, mudanças de preço e oportunidades de ganho'
-    },
-  ];
+export default function GiroProPlusPage() {
+  const { user } = useAuth();
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [isPro, setIsPro] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      GiroDataService.fetchUserProfile(user.id).then(({ data }) => {
+        // @ts-ignore
+        if (data?.is_pro) setIsPro(true);
+      });
+    }
+  }, [user]);
+
+  const handleSubscribe = async () => {
+    if (!user) return;
+    setLoading(true);
+
+    // --- SIMULAÇÃO DE PAGAMENTO ---
+    // @ts-ignore
+    const { error } = await GiroDataService.updateUserProfile(user.id, { is_pro: true });
+
+    if (!error) {
+        toast.success("👑 Parabéns! Você agora é GiroPro+!");
+        setIsPro(true);
+        setTimeout(() => router.push('/'), 2000);
+    } else {
+        toast.error("Erro ao processar assinatura. Tente novamente.");
+    }
+    setLoading(false);
+  };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6 space-y-8">
-      {/* Header Premium */}
-      <div className="text-center">
-        <div className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-yellow-400 via-amber-500 to-yellow-600 rounded-3xl mb-4 shadow-2xl animate-pulse">
-          <Crown className="w-12 h-12 text-white" />
-        </div>
-        <h1 className="text-5xl md:text-6xl font-bold bg-gradient-to-r from-yellow-600 via-amber-600 to-yellow-500 bg-clip-text text-transparent mb-3">
-          GiroPro+
-        </h1>
-        <p className="text-gray-600 dark:text-gray-300 text-xl mb-2">Recursos Profissionais para Aumentar Sua Renda</p>
-        <p className="text-gray-500 dark:text-gray-400">Desbloqueie todo o potencial do GiroPro</p>
-      </div>
-
-      {/* Banner Destaque */}
-      <div className="bg-gradient-to-r from-yellow-400 via-amber-500 to-yellow-600 rounded-3xl shadow-2xl p-8 text-white text-center">
-        <Crown className="w-16 h-16 mx-auto mb-4" />
-        <h2 className="text-3xl font-bold mb-3">Ganhe Até 30% Mais com Insights Profissionais</h2>
-        <p className="text-lg text-white/90 mb-6">
-          Motoristas GiroPro+ aumentam seus ganhos em média 25-30% nos primeiros 3 meses
-        </p>
-        <div className="flex flex-col md:flex-row gap-4 justify-center items-center">
-          <div className="bg-white/20 backdrop-blur-sm rounded-xl px-6 py-3">
-            <p className="text-sm text-white/80">Mais de</p>
-            <p className="text-3xl font-bold">5.000+</p>
-            <p className="text-sm text-white/80">motoristas premium</p>
-          </div>
-          <div className="bg-white/20 backdrop-blur-sm rounded-xl px-6 py-3">
-            <p className="text-sm text-white/80">Avaliação</p>
-            <p className="text-3xl font-bold">4.9⭐</p>
-            <p className="text-sm text-white/80">de satisfação</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Recursos Premium */}
-      <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl p-8 border-2 border-yellow-200 dark:border-yellow-800">
-        <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-6 text-center flex items-center justify-center gap-3">
-          <Zap className="w-8 h-8 text-yellow-600" />
-          Recursos Exclusivos
-        </h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          {recursos.map((recurso, index) => (
-            <div
-              key={index}
-              className="relative bg-gradient-to-br from-gray-50 to-yellow-50 dark:from-gray-800 dark:to-yellow-900/20 rounded-2xl p-6 border-2 border-yellow-200 dark:border-yellow-800/50 hover:border-yellow-400 transition-all hover:shadow-xl group"
-            >
-              {/* Badge "Premium" */}
-              <div className="absolute top-4 right-4 bg-gradient-to-r from-yellow-400 to-amber-500 text-white text-xs font-bold px-3 py-1 rounded-full">
-                PREMIUM
-              </div>
-
-              <div className="flex items-start gap-4">
-                <div className="bg-gradient-to-br from-yellow-400 to-amber-500 rounded-xl p-3 shadow-lg group-hover:scale-110 transition-transform">
-                  <recurso.icon className="w-6 h-6 text-white" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-bold text-gray-900 dark:text-white mb-2 text-lg">{recurso.titulo}</h3>
-                  <p className="text-gray-600 dark:text-gray-300 leading-relaxed">{recurso.descricao}</p>
-                </div>
-              </div>
-
-              {/* Overlay de bloqueio */}
-              <div className="absolute inset-0 bg-gray-900/5 dark:bg-black/40 backdrop-blur-[1px] rounded-2xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="bg-white dark:bg-gray-800 rounded-xl px-6 py-3 shadow-xl">
-                  <p className="text-sm font-bold text-gray-900 dark:text-white">🔒 Disponível no GiroPro+</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Comparação Gratuito vs Premium */}
-        <div className="bg-gradient-to-r from-gray-100 to-yellow-100 dark:from-gray-800 dark:to-yellow-900/30 rounded-2xl p-6 mb-8">
-          <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 text-center">Gratuito vs Premium</h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Gratuito */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border-2 border-gray-300 dark:border-gray-700">
-              <h4 className="font-bold text-gray-900 dark:text-white mb-4 text-xl">Versão Gratuita</h4>
-              <ul className="space-y-3">
-                <li className="flex items-start gap-2">
-                  <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700 dark:text-gray-300">Cálculo de giro básico</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700 dark:text-gray-300">Custo por KM</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700 dark:text-gray-300">Insights gerais</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700 dark:text-gray-300">Histórico simples</span>
-                </li>
-              </ul>
-            </div>
-
-            {/* Premium */}
-            <div className="bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 rounded-xl p-6 border-2 border-yellow-400 relative overflow-hidden">
-              <div className="absolute top-0 right-0 bg-gradient-to-r from-yellow-400 to-amber-500 text-white text-xs font-bold px-4 py-1 rounded-bl-xl">
-                RECOMENDADO
-              </div>
-              <h4 className="font-bold text-gray-900 dark:text-white mb-4 text-xl flex items-center gap-2">
-                <Crown className="w-5 h-5 text-yellow-600" />
-                GiroPro+
-              </h4>
-              <ul className="space-y-3">
-                <li className="flex items-start gap-2">
-                  <Check className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700 dark:text-gray-300 font-medium">Tudo da versão gratuita +</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Check className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700 dark:text-gray-300">Horários personalizados com IA</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Check className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700 dark:text-gray-300">Análise avançada de desempenho</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Check className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700 dark:text-gray-300">Relatórios semanais automáticos</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Check className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700 dark:text-gray-300">Melhores regiões em tempo real</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Check className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700 dark:text-gray-300">Alertas inteligentes personalizados</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Check className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-700 dark:text-gray-300">Suporte prioritário</span>
-                </li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        {/* Planos */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Plano Mensal */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 border-2 border-gray-300 dark:border-gray-700 hover:border-yellow-400 transition-all hover:shadow-xl">
-            <div className="text-center mb-6">
-              <p className="text-gray-600 dark:text-gray-400 font-medium mb-2">Plano Mensal</p>
-              <div className="flex items-baseline justify-center gap-1">
-                <span className="text-5xl font-bold text-gray-900 dark:text-white">R$ 9</span>
-                <span className="text-2xl text-gray-600 dark:text-gray-400">,90</span>
-                <span className="text-gray-500 dark:text-gray-500">/mês</span>
-              </div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">Cancele quando quiser</p>
-            </div>
-            <button className="w-full bg-gradient-to-r from-gray-600 to-gray-700 dark:from-gray-700 dark:to-gray-800 text-white font-bold py-4 rounded-xl hover:from-gray-700 hover:to-gray-800 transition-all shadow-lg hover:shadow-xl transform hover:scale-105">
-              Assinar Mensal
-            </button>
-          </div>
-
-          {/* Plano Anual */}
-          <div className="bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 rounded-2xl p-8 border-2 border-yellow-400 hover:border-yellow-500 transition-all hover:shadow-2xl relative">
-            <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-green-500 to-emerald-600 text-white text-sm font-bold px-4 py-1 rounded-full">
-              ECONOMIZE 33%
-            </div>
-            <div className="text-center mb-6">
-              <p className="text-gray-700 dark:text-gray-300 font-medium mb-2">Plano Anual</p>
-              <div className="flex items-baseline justify-center gap-1">
-                <span className="text-5xl font-bold text-gray-900 dark:text-white">R$ 79</span>
-                <span className="text-2xl text-gray-600 dark:text-gray-400">,90</span>
-                <span className="text-gray-500 dark:text-gray-500">/ano</span>
-              </div>
-              <p className="text-sm text-green-600 dark:text-green-400 font-bold mt-2">R$ 6,66/mês • Economize R$ 39/ano</p>
-            </div>
-            <button className="w-full bg-gradient-to-r from-yellow-400 via-amber-500 to-yellow-600 text-white font-bold py-4 rounded-xl hover:from-yellow-500 hover:via-amber-600 hover:to-yellow-700 transition-all shadow-xl hover:shadow-2xl transform hover:scale-105">
-              Assinar Anual (Melhor Oferta)
-            </button>
-          </div>
-        </div>
-
-        {/* Garantia */}
-        <div className="mt-8 text-center">
-          <div className="inline-flex items-center gap-2 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 px-6 py-3 rounded-full font-bold">
-            <Check className="w-5 h-5" />
-            Garantia de 7 dias - 100% do seu dinheiro de volta
-          </div>
-        </div>
-      </div>
-
-      {/* Depoimentos */}
-      <div className="bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-3xl p-8 border-2 border-blue-200 dark:border-blue-800">
-        <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-6 text-center">O Que Dizem Nossos Usuários Premium</h2>
+    <ProtectedRoute>
+    <div className="min-h-screen bg-gradient-to-b from-orange-50/50 via-white to-white dark:from-gray-900 dark:via-gray-950 dark:to-black py-12 px-4">
+      <div className="container max-w-5xl mx-auto">
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="text-2xl">⭐⭐⭐⭐⭐</div>
+        {/* HEADER COM ÍCONE CROWN */}
+        <div className="text-center mb-12 space-y-4">
+          <div className="inline-flex items-center justify-center p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-full mb-4 shadow-lg animate-bounce-slow">
+             <Crown className="w-10 h-10 text-yellow-600 dark:text-yellow-400" />
+          </div>
+          
+          <h1 className="text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-600 via-yellow-500 to-orange-600 pb-2">
+            GiroPro<span className="text-gray-900 dark:text-white">+</span>
+          </h1>
+          <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto font-medium">
+            A ferramenta definitiva para quem leva o volante a sério.
+            Desbloqueie o poder total dos seus dados.
+          </p>
+        </div>
+
+        <div className="grid lg:grid-cols-3 gap-8 items-start">
+          
+          {/* BENEFÍCIOS (ESQUERDA) */}
+          <div className="lg:col-span-2 space-y-6">
+            
+            {/* Feature 1: GiroGarage (NOVO) */}
+            <div className="flex gap-4 items-start p-6 bg-white dark:bg-gray-900 rounded-2xl shadow-sm border-l-4 border-l-orange-500 border-y border-r border-gray-100 dark:border-gray-800 hover:shadow-md transition-shadow">
+                <div className="bg-orange-100 dark:bg-orange-900/30 p-3 rounded-xl">
+                    <Wrench className="w-8 h-8 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div>
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">GiroGarage: Mecânico Virtual</h3>
+                    <p className="text-gray-600 dark:text-gray-400 mt-2">
+                        Controle automático de troca de óleo, pneus e correia baseado no seu KM rodado. Receba alertas antes do problema acontecer.
+                    </p>
+                </div>
             </div>
-            <p className="text-gray-700 dark:text-gray-300 mb-4 italic">"Aumentei meus ganhos em 28% no primeiro mês! Os insights de horários são incríveis."</p>
-            <p className="text-sm font-bold text-gray-900 dark:text-white">Carlos, Uber - São Paulo</p>
+
+            {/* Feature 2: Relatórios */}
+            <div className="flex gap-4 items-start p-6 bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 hover:shadow-md transition-shadow">
+                <div className="bg-blue-100 dark:bg-blue-900/30 p-3 rounded-xl">
+                    <FileText className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">Relatórios Oficiais em PDF</h3>
+                    <p className="text-gray-600 dark:text-gray-400 mt-2">
+                        Chega de planilha. Gere comprovantes de renda profissionais para financiamentos, aluguel e declaração de MEI/IR com um clique.
+                    </p>
+                </div>
+            </div>
+
+            {/* Feature 3: Histórico */}
+            <div className="flex gap-4 items-start p-6 bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 hover:shadow-md transition-shadow">
+                <div className="bg-green-100 dark:bg-green-900/30 p-3 rounded-xl">
+                    <History className="w-8 h-8 text-green-600 dark:text-green-400" />
+                </div>
+                <div>
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">Histórico Ilimitado</h3>
+                    <p className="text-gray-600 dark:text-gray-400 mt-2">
+                        O plano grátis limita a visualização. No Pro+, você acessa cada corrida, cada ganho e cada KM desde o seu primeiro dia de uso.
+                    </p>
+                </div>
+            </div>
+
+            {/* Feature 4: IA Avançada */}
+            <div className="flex gap-4 items-start p-6 bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 hover:shadow-md transition-shadow">
+                <div className="bg-purple-100 dark:bg-purple-900/30 p-3 rounded-xl">
+                    <Zap className="w-8 h-8 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div>
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">Coach IA Ilimitado</h3>
+                    <p className="text-gray-600 dark:text-gray-400 mt-2">
+                        Análises profundas de desempenho semanal e mensal. Pergunte ao Coach onde melhorar e receba estratégias personalizadas.
+                    </p>
+                </div>
+            </div>
+
           </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="text-2xl">⭐⭐⭐⭐⭐</div>
+          {/* CARTÃO DE PREÇO (DIREITA - STICKY) */}
+          <div className="lg:sticky lg:top-24">
+            <Card className="border-4 border-yellow-400 shadow-2xl relative overflow-hidden bg-white dark:bg-gray-900 transform hover:scale-[1.02] transition-transform duration-300">
+                <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-yellow-400 to-orange-600"></div>
+                <CardHeader className="text-center pt-10 pb-2">
+                    <div className="mx-auto bg-gradient-to-br from-yellow-100 to-orange-100 dark:from-yellow-900/40 dark:to-orange-900/40 w-20 h-20 rounded-full flex items-center justify-center mb-4 shadow-inner">
+                        <Crown className="w-10 h-10 text-orange-600 dark:text-orange-400" />
+                    </div>
+                    <CardTitle className="text-3xl font-black text-gray-900 dark:text-white">Assinatura Pro</CardTitle>
+                    <CardDescription className="text-base">Invista na sua carreira.</CardDescription>
+                </CardHeader>
+                <CardContent className="text-center space-y-6">
+                    <div className="flex items-center justify-center gap-2">
+                        <span className="text-base text-gray-400 line-through font-medium">R$ 29,90</span>
+                        <Badge variant="secondary" className="bg-green-100 text-green-700 hover:bg-green-200 font-bold">OFERTA</Badge>
+                    </div>
+                    <div className="flex items-baseline justify-center gap-1">
+                        <span className="text-xl font-medium text-gray-500">R$</span>
+                        <span className="text-6xl font-black text-gray-900 dark:text-white tracking-tighter">19,90</span>
+                        <span className="text-lg font-medium text-gray-500">/mês</span>
+                    </div>
+                    <p className="text-sm text-gray-500 font-medium">Menos que uma corrida mínima por mês.</p>
+                    
+                    <div className="border-t border-gray-100 dark:border-gray-800 pt-6 space-y-3 text-left text-sm">
+                        <div className="flex items-center gap-3"><div className="bg-green-100 p-1 rounded-full"><Check className="w-3 h-3 text-green-600"/></div> <span className="font-medium">GiroGarage (Manutenção)</span></div>
+                        <div className="flex items-center gap-3"><div className="bg-green-100 p-1 rounded-full"><Check className="w-3 h-3 text-green-600"/></div> <span className="font-medium">Relatórios PDF Oficiais</span></div>
+                        <div className="flex items-center gap-3"><div className="bg-green-100 p-1 rounded-full"><Check className="w-3 h-3 text-green-600"/></div> <span className="font-medium">Histórico Infinito</span></div>
+                        <div className="flex items-center gap-3"><div className="bg-green-100 p-1 rounded-full"><Check className="w-3 h-3 text-green-600"/></div> <span className="font-medium">Sem Anúncios</span></div>
+                    </div>
+                </CardContent>
+                <CardFooter className="pb-8">
+                    {isPro ? (
+                        <Button className="w-full h-16 text-xl bg-green-600 hover:bg-green-700 font-bold rounded-xl shadow-lg cursor-default opacity-90" disabled>
+                            <Check className="mr-2 w-6 h-6" /> VOCÊ JÁ É PRO
+                        </Button>
+                    ) : (
+                        <Button 
+                            onClick={handleSubscribe} 
+                            disabled={loading}
+                            className="w-full h-16 text-xl font-bold bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 shadow-orange-500/30 shadow-xl rounded-xl group transition-all hover:scale-[1.02]"
+                        >
+                            {loading ? 'Processando...' : (
+                                <span className="flex items-center gap-2">
+                                    QUERO SER PRO <ChevronRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
+                                </span>
+                            )}
+                        </Button>
+                    )}
+                </CardFooter>
+            </Card>
+            
+            <div className="mt-6 flex items-center justify-center gap-2 text-xs text-gray-400 font-medium">
+                <ShieldCheck className="w-4 h-4" /> Pagamento 100% Seguro via Stripe/Pix
             </div>
-            <p className="text-gray-700 dark:text-gray-300 mb-4 italic">"Finalmente consigo planejar minha semana e sei exatamente onde e quando trabalhar."</p>
-            <p className="text-sm font-bold text-gray-900 dark:text-white">Ana, 99 - Rio de Janeiro</p>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="text-2xl">⭐⭐⭐⭐⭐</div>
-            </div>
-            <p className="text-gray-700 dark:text-gray-300 mb-4 italic">"Melhor investimento que fiz! Paga sozinho em menos de uma semana de trabalho."</p>
-            <p className="text-sm font-bold text-gray-900 dark:text-white">João, iFood - Belo Horizonte</p>
-          </div>
         </div>
       </div>
     </div>
+    </ProtectedRoute>
   );
 }

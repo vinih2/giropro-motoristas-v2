@@ -1,9 +1,12 @@
+// src/app/login/page.tsx
 'use client';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
-import { Mail, Chrome } from 'lucide-react';
+import { authService } from '@/services/authService'; 
+import { Mail, Chrome, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -14,14 +17,12 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/`,
-        },
-      });
+      const { error } = await authService.signInWithGoogle();
       
       if (error) throw error;
+      
+      // NOTA: O redirecionamento final é feito pelo Supabase
+      // para o URL que passamos no service (window.location.origin/)
     } catch (error: any) {
       setMessage(error.message || 'Erro ao fazer login com Google');
       setLoading(false);
@@ -34,12 +35,7 @@ export default function LoginPage() {
     setMessage('');
 
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: `${window.location.origin}/`,
-        },
-      });
+      const { error } = await authService.signInWithOtp(email);
 
       if (error) throw error;
 
@@ -55,10 +51,10 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-orange-50 via-white to-yellow-50 dark:from-gray-950 dark:via-gray-900 dark:to-black">
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
-          <h1 className="text-5xl font-bold bg-gradient-to-r from-orange-600 via-yellow-600 to-orange-500 bg-clip-text text-transparent mb-3">
+          <h1 className="text-5xl font-black bg-gradient-to-r from-orange-600 via-yellow-600 to-orange-500 bg-clip-text text-transparent mb-3">
             GiroPro
           </h1>
-          <p className="text-gray-600 dark:text-gray-300 text-lg">Entre para acessar seu coach financeiro</p>
+          <p className="text-gray-600 dark:text-gray-300 text-lg">Entre ou crie sua conta para começar a lucrar mais.</p>
         </div>
 
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-8 border border-gray-100 dark:border-gray-800">
@@ -85,7 +81,7 @@ export default function LoginPage() {
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                 Email
               </label>
-              <input
+              <Input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -95,14 +91,14 @@ export default function LoginPage() {
               />
             </div>
 
-            <button
+            <Button
               type="submit"
               disabled={loading || !email}
               className="w-full flex items-center justify-center gap-3 bg-gradient-to-r from-orange-500 via-yellow-500 to-orange-500 text-white font-bold py-4 px-6 rounded-xl hover:from-orange-600 hover:via-yellow-600 hover:to-orange-600 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                  <Loader2 className="animate-spin h-5 w-5" />
                   Enviando...
                 </>
               ) : (
@@ -111,7 +107,7 @@ export default function LoginPage() {
                   Entrar com Email
                 </>
               )}
-            </button>
+            </Button>
           </form>
 
           {message && (

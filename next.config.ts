@@ -1,7 +1,15 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
-  devIndicators: false, // Remove widget de desenvolvimento Next.js
+// Importa o módulo next-pwa
+const withPWA = require('next-pwa')({
+  dest: 'public',
+  register: true,
+  skipWaiting: true,
+  disable: process.env.NODE_ENV === 'development', // Desabilita em dev
+});
+
+const nextConfig: NextConfig = withPWA({ // ENVOLVE A CONFIGURAÇÃO
+  devIndicators: false, 
   
   // Ignorar erros durante build (compatibilidade Vercel)
   eslint: {
@@ -14,7 +22,7 @@ const nextConfig: NextConfig = {
   // Configuração de imagens para principais provedores
   images: {
     remotePatterns: [
-      // Unsplash - Banco de imagens gratuitas
+      // ... (todas as configurações de remotePatterns)
       {
         protocol: 'https',
         hostname: 'images.unsplash.com',
@@ -222,6 +230,6 @@ const nextConfig: NextConfig = {
       }
     ]
   },
-};
+});
 
 export default nextConfig;
