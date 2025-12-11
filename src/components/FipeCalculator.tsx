@@ -3,10 +3,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Car, TrendingDown, AlertCircle, Check, Loader2, ChevronDown } from 'lucide-react';
+import { Car, TrendingDown, AlertCircle, Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatarMoeda } from '@/lib/calculations';
 import { SelectWithSearch } from './SelectWithSearch'; // NOVO COMPONENTE
+import { useAuth } from '@/hooks/useAuth';
+import GiroService from '@/services/giroService';
+import { toast } from 'sonner';
 
 // URL BASE para o nosso novo endpoint de proxy
 const LOCAL_FIPE_URL = '/api/fipe/marcas';
@@ -19,11 +22,12 @@ const MARCAS_PRINCIPAIS = [
 ];
 
 interface FipeOption {
-    codigo: string;
-    nome: string;
+  codigo: string;
+  nome: string;
 }
 
 export default function FipeCalculator() {
+  const { user } = useAuth();
   const [marcas, setMarcas] = useState<FipeOption[]>([]);
   const [modelos, setModelos] = useState<FipeOption[]>([]);
   const [anos, setAnos] = useState<FipeOption[]>([]);
@@ -34,6 +38,7 @@ export default function FipeCalculator() {
   
   const [valorFipe, setValorFipe] = useState<number | null>(null);
   const [depreciacaoKm, setDepreciacaoKm] = useState<number | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
   
   const [loadingModelos, setLoadingModelos] = useState(false);
   const [loadingAnos, setLoadingAnos] = useState(false);
@@ -41,25 +46,36 @@ export default function FipeCalculator() {
 
   // Função para limpar estados subsequentes
   const clearModelo = () => { setModeloSel(''); setAnos([]); setAnoSel(''); setValorFipe(null); setDepreciacaoKm(null); };
-  const clearAno = () => { setAnoSel(''); setValorFipe(null); setDepreciacaoKm(null); };
-  
+  const clearAno = () => {
+    setAnoSel('');
+    setValorFipe(null);
+    setDepreciacaoKm(null);
+  };
+
+  type FipeBrandResponse = FipeOption[];
+  type FipeModelsResponse = { modelos: FipeOption[] };
+  type FipeYearsResponse = FipeOption[];
+  type FipeValueResponse = { Valor: string };
+
   // 1. Carregar Marcas (USANDO O NOVO PROXY)
   useEffect(() => {
     fetch(`${LOCAL_FIPE_URL}`)
-      .then(res => res.json())
-      .then(data => {
+      .then((res) => res.json() as Promise<FipeBrandResponse>)
+      .then((data) => {
         if (!Array.isArray(data)) return;
-        
-        const sorted = data.sort((a: any, b: any) => {
-            const aEhPrincipal = MARCAS_PRINCIPAIS.some(p => a.nome.includes(p));
-            const bEhPrincipal = MARCAS_PRINCIPAIS.some(p => b.nome.includes(p));
-            if (aEhPrincipal && !bEhPrincipal) return -1;
-            if (!aEhPrincipal && bEhPrincipal) return 1;
-            return a.nome.localeCompare(b.nome);
+
+        const sorted = data.sort((a, b) => {
+          const aPrincipal = MARCAS_PRINCIPAIS.some((nome) => a.nome.includes(nome));
+          const bPrincipal = MARCAS_PRINCIPAIS.some((nome) => b.nome.includes(nome));
+          if (aPrincipal && !bPrincipal) return -1;
+          if (!aPrincipal && bPrincipal) return 1;
+          return a.nome.localeCompare(b.nome);
         });
         setMarcas(sorted);
       })
-      .catch(console.error);
+      .catch((error) => {
+        console.error(error);
+      });
   }, []);
 
   // 2. Carregar Modelos (Ao escolher Marca)
@@ -73,16 +89,19 @@ export default function FipeCalculator() {
     clearModelo();
     
     fetch(`${LOCAL_FIPE_URL}/${marcaSel}/modelos`)
-      .then(res => res.json())
-      .then(data => {
-        const mappedModels: FipeOption[] = (data.modelos || []).map((m: any) => ({
-            codigo: m.codigo.toString(),
-            nome: m.nome,
+      .then((res) => res.json() as Promise<FipeModelsResponse>)
+      .then((data) => {
+        const mappedModels: FipeOption[] = (data.modelos || []).map((modelo) => ({
+          codigo: modelo.codigo.toString(),
+          nome: modelo.nome,
         }));
         setModelos(mappedModels);
         setLoadingModelos(false);
       })
-      .catch(() => setLoadingModelos(false));
+      .catch((error) => {
+        console.error(error);
+        setLoadingModelos(false);
+      });
   }, [marcaSel]);
 
   // 3. Carregar Anos (Ao escolher Modelo)
@@ -96,16 +115,19 @@ export default function FipeCalculator() {
     clearAno();
 
     fetch(`${LOCAL_FIPE_URL}/${marcaSel}/modelos/${modeloSel}/anos`)
-      .then(res => res.json())
-      .then(data => {
-        const mappedAnos: FipeOption[] = (data || []).map((a: any) => ({
-            codigo: a.codigo.toString(),
-            nome: a.nome,
+      .then((res) => res.json() as Promise<FipeYearsResponse>)
+      .then((data) => {
+        const mappedAnos: FipeOption[] = (data || []).map((ano) => ({
+          codigo: ano.codigo.toString(),
+          nome: ano.nome,
         }));
         setAnos(mappedAnos);
         setLoadingAnos(false);
       })
-      .catch(() => setLoadingAnos(false));
+      .catch((error) => {
+        console.error(error);
+        setLoadingAnos(false);
+      });
   }, [marcaSel, modeloSel]);
 
   // 4. Buscar Valor Final (Ao escolher Ano)
@@ -114,20 +136,25 @@ export default function FipeCalculator() {
     setLoadingValor(true);
     try {
       const res = await fetch(`${LOCAL_FIPE_URL}/${marcaSel}/modelos/${modeloSel}/anos/${anoSel}`);
-      const data = await res.json();
-      
+      const data = (await res.json()) as FipeValueResponse;
+
       const valorNumerico = parseFloat(data.Valor.replace('R$ ', '').replace('.', '').replace(',', '.'));
       setValorFipe(valorNumerico);
 
       const depPorKm = (valorNumerico * 0.15) / 40000;
       setDepreciacaoKm(depPorKm);
-      
-      if(typeof window !== 'undefined') {
-        localStorage.setItem('custoDepreciacao', depPorKm.toFixed(4)); // Salva com 4 casas para precisão
+
+      if (user) {
+        setSavingProfile(true);
+        await GiroService.updateUserProfile(user.id, { depreciacao_por_km: depPorKm });
+        toast.success('Depreciação sincronizada com o dashboard.');
+      } else {
+        toast.success('Depreciação calculada. Entre na conta para sincronizar.');
       }
     } catch (error) {
       console.error(error);
     } finally {
+      setSavingProfile(false);
       setLoadingValor(false);
     }
   };
@@ -160,7 +187,7 @@ export default function FipeCalculator() {
           selectedValue={modeloSel}
           onSelect={setModeloSel}
           onClear={clearModelo}
-          isLoading={loadingModelos}
+          loading={loadingModelos}
           disabled={!marcaSel}
         />
 
@@ -172,17 +199,24 @@ export default function FipeCalculator() {
           selectedValue={anoSel}
           onSelect={setAnoSel}
           onClear={clearAno}
-          isLoading={loadingAnos}
+          loading={loadingAnos}
           disabled={!modeloSel}
         />
       </div>
 
       <Button 
         onClick={buscarValor} 
-        disabled={!anoSel || loadingValor} 
+        disabled={!anoSel || loadingValor || savingProfile} 
         className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold h-12 rounded-xl shadow-md active:scale-95 transition-all"
       >
-        {loadingValor ? <span className="flex items-center gap-2"><Loader2 className="animate-spin h-5 w-5" /> Calculando...</span> : `Calcular Depreciação ${anoSelecionado ? `(${anoSelecionado})` : ''}`}
+        {loadingValor || savingProfile ? (
+          <span className="flex items-center gap-2">
+            <Loader2 className="animate-spin h-5 w-5" />
+            {savingProfile ? 'Sincronizando...' : 'Calculando...'}
+          </span>
+        ) : (
+          `Calcular Depreciação ${anoSelecionado ? `(${anoSelecionado})` : ''}`
+        )}
       </Button>
 
       {valorFipe && depreciacaoKm && (
@@ -212,7 +246,7 @@ export default function FipeCalculator() {
           <div className="mt-4 flex items-start gap-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
             <Check className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0" />
             <p className="text-sm text-green-800 dark:text-green-200 font-medium">
-              Sucesso! O custo de depreciação foi salvo. Lembre-se de somá-lo ao seu Custo de Combustível!
+              Sucesso! O custo de depreciação foi sincronizado com o dashboard e simulador.
             </p>
           </div>
         </div>

@@ -1,45 +1,40 @@
 // src/app/pro/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Check, Star, Zap, FileText, ShieldCheck, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
-import GiroDataService from '@/services/giroService';
+import { useUserProfile } from '@/hooks/useUserProfile';
 import { useRouter } from 'next/navigation';
+import { logAnalyticsEvent } from '@/services/analyticsService';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
 export default function ProPage() {
   const { user } = useAuth();
   const router = useRouter();
+  const { profile, updateProfile } = useUserProfile();
   const [loading, setLoading] = useState(false);
-  const [isPro, setIsPro] = useState(false);
-
-  useEffect(() => {
-    if (user) {
-      GiroDataService.fetchUserProfile(user.id).then(({ data }) => {
-        // @ts-ignore
-        if (data?.is_pro) setIsPro(true);
-      });
-    }
-  }, [user]);
+  const isPro = !!profile?.is_pro;
 
   const handleSubscribe = async () => {
     if (!user) return;
     setLoading(true);
 
-    // --- SIMULAÇÃO DE PAGAMENTO (Integração Stripe/MP entraria aqui) ---
-    // Aqui estamos apenas atualizando o banco para TRUE direto
-    // @ts-ignore
-    const { error } = await GiroDataService.updateUserProfile(user.id, { is_pro: true });
+    logAnalyticsEvent(user.id, 'pro_cta_clicked', {
+      source: 'pro_page',
+    }).catch(() => {});
 
-    if (!error) {
+    try {
+      await updateProfile({ is_pro: true });
+        logAnalyticsEvent(user.id, 'pro_upgrade_success', {
+          source: 'pro_page',
+        }).catch(() => {});
         toast.success("🎉 Bem-vindo ao GiroPro+! Funcionalidades desbloqueadas.");
-        setIsPro(true);
         setTimeout(() => router.push('/'), 2000);
-    } else {
+    } catch {
         toast.error("Erro ao processar assinatura.");
     }
     setLoading(false);

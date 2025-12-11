@@ -5,10 +5,17 @@ import "./globals.css";
 import Navbar from "@/components/custom/navbar";
 import { useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { Toaster } from "@/components/ui/sonner"; 
-import GiroGuardButton from "@/components/GiroGuardButton"; 
-// 1. IMPORTAR O NOVO COMPONENTE
+import { Toaster } from "@/components/ui/sonner";
+import GiroGuardButton from "@/components/GiroGuardButton";
 import PageTransition from "@/components/PageTransition";
+import { PeriodProvider } from "@/context/PeriodContext";
+import PeriodSelector from "@/components/PeriodSelector";
+import { FeatureFlagsProvider } from "@/context/FeatureFlagsContext";
+import WhatsAppTestListener from "@/components/dev/WhatsAppTestListener";
+import { AuthProvider } from "@/context/AuthContext";
+import { UserProfileProvider } from "@/context/UserProfileContext";
+import { WelcomeModal } from "@/components/WelcomeModal";
+import { QueryProvider } from "@/providers/QueryProvider";
 
 export default function RootLayout({
   children,
@@ -48,17 +55,26 @@ export default function RootLayout({
           transition-colors duration-300
         "
       >
-        {/* Componentes Globais (Fora da Animação) */}
-        <Navbar />
-        <GiroGuardButton /> 
-        <Toaster /> 
-        
-        {/* 2. ENVOLVER O <main> COM O PageTransition */}
-        <main className="pb-24 pt-20 md:pt-24 md:pb-8">
-          <PageTransition>
-            {children}
-          </PageTransition>
-        </main>
+        <QueryProvider>
+          <AuthProvider>
+            <UserProfileProvider>
+              <Navbar />
+              <GiroGuardButton />
+              <Toaster />
+
+              <FeatureFlagsProvider>
+                <PeriodProvider>
+                  <main className="pb-24 pt-20 md:pt-24 md:pb-8">
+                    <PeriodSelector />
+                    <WhatsAppTestListener />
+                    <PageTransition>{children}</PageTransition>
+                  </main>
+                  <WelcomeModal />
+                </PeriodProvider>
+              </FeatureFlagsProvider>
+            </UserProfileProvider>
+          </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );

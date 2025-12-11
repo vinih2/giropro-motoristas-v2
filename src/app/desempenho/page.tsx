@@ -1,23 +1,27 @@
 // src/app/desempenho/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, ReactNode, useCallback } from 'react';
 import { formatarMoeda } from '@/lib/calculations';
 import {
   Clock, Navigation, DollarSign, TrendingUp, 
-  PieChart as PieChartIcon, Calendar, ArrowUpRight, Loader2, BrainCircuit, Sparkles, BarChart4, Plus
+  Calendar, Loader2, BrainCircuit, Sparkles, BarChart4, Plus, Crown
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, 
-  BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer,
+  PieChart, Pie, Cell, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAuth } from '@/hooks/useAuth';
+import { useUserProfile } from '@/hooks/useUserProfile';
 import { supabase } from '@/lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import Link from 'next/link'; // Importar Link
+import Link from 'next/link';
+import { usePeriod } from '@/context/PeriodContext';
+import { logAnalyticsEvent } from '@/services/analyticsService';
+import type { TooltipProps } from 'recharts';
 
 interface Registro {
   id: number; user_id: string; data: string; plataforma: string;
@@ -43,44 +47,140 @@ const EmptyState = () => (
     </div>
 );
 
+const LucroTooltip = ({ active, payload, label }: TooltipProps<number, string>) => {
+  if (!active || !payload?.length) return null;
+  const value = typeof payload[0].value === 'number' ? payload[0].value : 0;
+  return (
+    <div className="rounded-2xl bg-zinc-900/95 border border-white/10 px-4 py-3 shadow-xl min-w-[160px]">
+      <p className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 font-bold mb-1">Dia {label}</p>
+      <p className="text-lg font-black text-white">{formatarMoeda(value)}</p>
+      <p className="text-[11px] text-zinc-400 mt-1">Lucro líquido registrado</p>
+    </div>
+  );
+};
+
 function DesempenhoContent() {
   const { user } = useAuth();
+  const { profile, loading: profileLoading } = useUserProfile();
+  const { range } = usePeriod();
   const [registros, setRegistros] = useState<Registro[]>([]);
   const [loading, setLoading] = useState(true);
   const [analiseIA, setAnaliseIA] = useState('');
   const [loadingIA, setLoadingIA] = useState(false);
+  const isPro = !!profile?.is_pro;
+  const accessChecked = !profileLoading;
 
-  useEffect(() => { if (user) carregarDados(); }, [user]);
+  const userId = user?.id;
 
-  const carregarDados = async () => {
-    if (!user) return;
-    const { data } = await supabase.from('registros').select('*').eq('user_id', user.id).order('data', { ascending: true });
-    if (data) setRegistros(data);
+  const carregarDados = useCallback(async () => {
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
+    const { data, error } = await supabase
+        .from('registros')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('data', range.start)
+        .lte('data', range.end)
+        .order('data', { ascending: true });
+    if (error) {
+      setRegistros([]);
+    } else if (data) {
+      setRegistros(data);
+    }
     setLoading(false);
-  };
+  }, [userId, range.start, range.end]);
+
+  useEffect(() => {
+    if (!user || !isPro) return;
+    setLoading(true);
+    carregarDados();
+  }, [user, isPro, carregarDados]);
+
+  if (!accessChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+      </div>
+    );
+  }
+
+  if (!isPro) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-black px-4">
+          <div className="max-w-2xl w-full bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl shadow-2xl p-10 text-center space-y-6">
+            <div className="flex flex-col items-center gap-3">
+              <Crown className="w-12 h-12 text-orange-500" />
+              <p className="text-[11px] uppercase tracking-[0.4em] text-gray-400 font-bold">Desempenho avançado</p>
+              <h1 className="text-3xl font-black text-gray-900 dark:text-white">Gráficos e IA liberados no Pro+</h1>
+              <p className="text-sm text-gray-500">
+                Comparativos mensais, ticket médio, análise automática por IA e relatórios visuais fazem parte da assinatura.
+                Atualize para enxergar a performance completa da sua operação.
+              </p>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-3 text-left text-sm font-medium text-gray-600 dark:text-gray-300">
+              <div className="flex items-start gap-3">
+                <Sparkles className="w-4 h-4 text-emerald-500 mt-0.5" />
+                <span>Análises táticas do seu mês com IA (sem limite).</span>
+              </div>
+              <div className="flex items-start gap-3">
+                <TrendingUp className="w-4 h-4 text-emerald-500 mt-0.5" />
+                <span>Gráficos de lucro diário, plataformas e ticket médio.</span>
+              </div>
+              <div className="flex items-start gap-3">
+                <Clock className="w-4 h-4 text-emerald-500 mt-0.5" />
+                <span>Comparativo de horas, km e metas com histórico completo.</span>
+              </div>
+            </div>
+            <Link href="/giropro-plus">
+              <Button className="w-full h-14 text-lg font-bold bg-orange-600 hover:bg-orange-700 rounded-2xl">
+                Desbloquear Desempenho Pro+
+              </Button>
+            </Link>
+          </div>
+      </div>
+    );
+  }
 
   // --- Cálculos ---
-  const hoje = new Date();
-  const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-  const registrosMes = registros.filter((r) => new Date(r.data) >= inicioMes);
-  const lucroMensal = registrosMes.reduce((acc, r) => acc + (r.lucro || 0), 0);
-  const totalHoras = registrosMes.reduce((acc, r) => acc + (r.horas || 0), 0);
-  const totalKm = registrosMes.reduce((acc, r) => acc + (r.km || 0), 0);
+  const registrosPeriodo = registros;
+  const lucroMensal = registrosPeriodo.reduce((acc, r) => acc + (r.lucro || 0), 0);
+  const totalHoras = registrosPeriodo.reduce((acc, r) => acc + (r.horas || 0), 0);
+  const totalKm = registrosPeriodo.reduce((acc, r) => acc + (r.km || 0), 0);
   const mediaHora = totalHoras > 0 ? lucroMensal / totalHoras : 0;
   const mediaKm = totalKm > 0 ? lucroMensal / totalKm : 0;
 
-  const dadosDiariosMap = new Map();
-  registrosMes.forEach(r => {
-      const dia = new Date(r.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-      if (!dadosDiariosMap.has(dia)) dadosDiariosMap.set(dia, { data: dia, lucro: 0 });
-      dadosDiariosMap.get(dia).lucro += r.lucro || 0;
+  const dadosDiariosMap = new Map<string, { data: string; lucro: number }>();
+  registrosPeriodo.forEach((registro) => {
+    const dia = new Date(registro.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    if (!dadosDiariosMap.has(dia)) {
+      dadosDiariosMap.set(dia, { data: dia, lucro: registro.lucro || 0 });
+    } else {
+      const diaAtual = dadosDiariosMap.get(dia);
+      if (diaAtual) {
+        diaAtual.lucro += registro.lucro || 0;
+      }
+    }
   });
   const dadosGrafico = Array.from(dadosDiariosMap.values());
 
   const platMap: Record<string, number> = {};
-  registrosMes.forEach(r => platMap[r.plataforma] = (platMap[r.plataforma] || 0) + 1);
+  registrosPeriodo.forEach(r => platMap[r.plataforma || 'Outro'] = (platMap[r.plataforma || 'Outro'] || 0) + 1);
   const dadosPizza = Object.entries(platMap).map(([name, value]) => ({ name, value }));
   const CORES_PIZZA = ['#f97316', '#10b981', '#3b82f6', '#8b5cf6'];
+  const diasAtivos = registrosPeriodo.reduce((set, r) => set.add(new Date(r.data).toDateString()), new Set<string>()).size;
+  const ticketMedio = diasAtivos > 0 ? lucroMensal / diasAtivos : 0;
+  const melhorDia = dadosGrafico.reduce(
+    (prev, curr) => (curr.lucro > prev.lucro ? curr : prev),
+    dadosGrafico[0] || { data: '--', lucro: 0 }
+  );
+  const heroStats = [
+      { label: 'Lucro no mês', value: formatarMoeda(lucroMensal) },
+      { label: 'Ticket por dia', value: formatarMoeda(ticketMedio) },
+      { label: 'Horas investidas', value: `${totalHoras.toFixed(1)}h` },
+      { label: 'Dias ativos', value: diasAtivos.toString() },
+  ];
 
   const gerarAnalise = async () => {
     if (!registros.length) return;
@@ -92,6 +192,11 @@ function DesempenhoContent() {
       });
       const data = await res.json();
       setAnaliseIA(data.insight);
+      logAnalyticsEvent(userId, 'coach_analysis_generated', {
+        periodo: `${new Date(range.start).toISOString()}_${new Date(range.end).toISOString()}`,
+        lucro: lucroMensal,
+        media_hora: mediaHora,
+      }).catch(() => {});
     } catch {} finally { setLoadingIA(false); }
   };
 
@@ -107,21 +212,45 @@ function DesempenhoContent() {
     <div className="min-h-screen bg-zinc-50 dark:bg-black pb-32 pt-8 px-4 font-sans">
       <div className="max-w-6xl mx-auto space-y-8">
         
-        <div className="flex justify-between items-end">
-            <div>
-                <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Performance</p>
-                <h1 className="text-3xl font-black text-zinc-900 dark:text-white tracking-tight">Seus Números</h1>
+        <div className="bg-gradient-to-br from-zinc-900 via-black to-zinc-800 text-white rounded-3xl p-6 shadow-2xl border border-zinc-800">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div>
+                    <p className="text-[11px] uppercase tracking-[0.4em] text-zinc-500 font-bold mb-2 flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-orange-300" /> Performance Radar
+                    </p>
+                    <h1 className="text-3xl font-black tracking-tight">Seu mês em alta</h1>
+                    <p className="text-sm text-zinc-400 mt-2">Melhor dia {melhorDia?.data || '--'} com {formatarMoeda(melhorDia?.lucro || 0)} de lucro.</p>
+                </div>
+                <Badge className="bg-orange-500/20 text-orange-200 border border-orange-500/30 px-3 py-1 flex items-center gap-1">
+                    <Calendar className="w-3 h-3" /> Este mês
+                </Badge>
             </div>
-            <Badge variant="outline" className="border-orange-200 text-orange-600 bg-orange-50 dark:bg-orange-900/20 px-3 py-1">
-                <Calendar className="w-3 h-3 mr-2" /> Este Mês
-            </Badge>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-6">
+                {heroStats.map((stat) => (
+                    <div key={stat.label} className="bg-white/5 rounded-2xl px-4 py-3 border border-white/10">
+                        <p className="text-[10px] uppercase tracking-[0.3em] text-zinc-400 font-bold">{stat.label}</p>
+                        <p className="text-2xl font-black mt-1">{stat.value}</p>
+                    </div>
+                ))}
+            </div>
+            <div className="flex flex-wrap gap-3 mt-6">
+                <Link href="/historico">
+                    <Button variant="secondary" className="bg-white text-zinc-900 font-bold rounded-full px-6 py-2 hover:bg-zinc-100">
+                        Ver histórico completo
+                    </Button>
+                </Link>
+                <Link href="/insights">
+                    <Button variant="ghost" className="border border-white/20 text-white rounded-full px-6 py-2 hover:bg-white/10">
+                        Abrir insights
+                    </Button>
+                </Link>
+            </div>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard title="Lucro Líquido" value={formatarMoeda(lucroMensal)} icon={<DollarSign/>} trend="positive" color="text-emerald-600" />
-            <KpiCard title="Média / Hora" value={formatarMoeda(mediaHora)} icon={<Clock/>} color="text-blue-600" />
-            <KpiCard title="Média / KM" value={formatarMoeda(mediaKm)} icon={<Navigation/>} color="text-orange-600" />
-            <KpiCard title="Total Horas" value={`${totalHoras.toFixed(0)}h`} icon={<TrendingUp/>} color="text-purple-600" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <KpiCard title="Lucro Líquido" value={formatarMoeda(lucroMensal)} icon={<DollarSign />} highlight="Meta atingida" />
+            <KpiCard title="Média / Hora" value={formatarMoeda(mediaHora)} icon={<Clock />} helper="Quanto você fez por hora ativa." />
+            <KpiCard title="Média / KM" value={formatarMoeda(mediaKm)} icon={<Navigation />} helper="Lucro a cada km rodado." />
         </div>
 
         <Card className="border-0 shadow-lg rounded-3xl overflow-hidden ring-1 ring-zinc-100 dark:ring-zinc-800">
@@ -132,19 +261,40 @@ function DesempenhoContent() {
             </CardHeader>
             <CardContent className="p-0 h-[300px] bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900 dark:to-black relative">
                 <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={dadosGrafico} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                    <AreaChart data={dadosGrafico} margin={{ top: 24, right: 24, left: 24, bottom: 12 }}>
                         <defs>
                             <linearGradient id="colorLucro" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#f97316" stopOpacity={0.3}/>
-                                <stop offset="95%" stopColor="#f97316" stopOpacity={0}/>
+                                <stop offset="0%" stopColor="#fb923c" stopOpacity={0.55}/>
+                                <stop offset="70%" stopColor="#fb923c" stopOpacity={0.08}/>
                             </linearGradient>
                         </defs>
-                        <Tooltip 
-                            contentStyle={{ backgroundColor: '#18181b', border: 'none', borderRadius: '8px', color: '#fff' }}
-                            itemStyle={{ color: '#fff', fontWeight: 'bold' }}
-                            formatter={(value: number) => [formatarMoeda(value), 'Lucro']}
+                        <CartesianGrid strokeDasharray="1 6" stroke="#d4d4d8" opacity={0.4} />
+                        <XAxis
+                          dataKey="data"
+                          tickLine={false}
+                          axisLine={false}
+                          tick={{ fill: '#a1a1aa', fontSize: 12 }}
+                          tickMargin={12}
                         />
-                        <Area type="monotone" dataKey="lucro" stroke="#f97316" strokeWidth={3} fillOpacity={1} fill="url(#colorLucro)" />
+                        <YAxis
+                          tickLine={false}
+                          axisLine={false}
+                          tick={{ fill: '#a1a1aa', fontSize: 11 }}
+                          tickFormatter={(value) => formatarMoeda(value).replace('R$', '').trim()}
+                          width={70}
+                          tickMargin={8}
+                        />
+                        <Tooltip content={<LucroTooltip />} cursor={{ stroke: '#fb923c', strokeWidth: 1, opacity: 0.2 }} />
+                        <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 6" />
+                        <Area
+                          type="monotone"
+                          dataKey="lucro"
+                          stroke="#fb923c"
+                          strokeWidth={3}
+                          fill="url(#colorLucro)"
+                          dot={{ r: 3, strokeWidth: 2, stroke: '#fff', fill: '#fb923c' }}
+                          activeDot={{ r: 5, strokeWidth: 0, fill: '#fdba74' }}
+                        />
                     </AreaChart>
                 </ResponsiveContainer>
             </CardContent>
@@ -178,7 +328,9 @@ function DesempenhoContent() {
                         </Button>
                     </div>
                     {analiseIA ? (
-                        <div className="animate-in fade-in slide-in-from-bottom-2"><p className="text-zinc-300 leading-relaxed font-medium text-sm md:text-base">"{analiseIA}"</p></div>
+                        <div className="animate-in fade-in slide-in-from-bottom-2">
+                            <p className="text-zinc-300 leading-relaxed font-medium text-sm md:text-base">&ldquo;{analiseIA}&rdquo;</p>
+                        </div>
                     ) : (
                         <p className="text-zinc-500 text-sm">Toque em gerar para analisar seu mês.</p>
                     )}
@@ -191,14 +343,20 @@ function DesempenhoContent() {
   );
 }
 
-function KpiCard({ title, value, icon, color }: any) {
+function KpiCard({ title, value, icon, helper, highlight }: { title: string; value: string; icon: ReactNode; helper?: string; highlight?: string }) {
     return (
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-100 dark:border-zinc-800 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex justify-between items-start mb-2">
-                <div className={`p-2 rounded-lg bg-zinc-50 dark:bg-zinc-800 ${color}`}>{icon}</div>
+        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-100 dark:border-zinc-800 shadow-sm hover:shadow-lg transition-all">
+            <div className="flex justify-between items-center mb-3">
+                <div className="p-2 rounded-lg bg-zinc-50 dark:bg-zinc-800 text-orange-500">
+                    {icon}
+                </div>
+                {highlight && (
+                    <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-orange-500">{highlight}</span>
+                )}
             </div>
             <p className="text-zinc-400 text-[10px] font-bold uppercase tracking-wider">{title}</p>
             <p className="text-2xl font-black text-zinc-900 dark:text-white mt-1 tracking-tight">{value}</p>
+            {helper && <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-2">{helper}</p>}
         </div>
     )
 }

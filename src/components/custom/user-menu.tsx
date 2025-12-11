@@ -73,6 +73,10 @@ export default function UserMenu() {
             <CreditCard className="mr-2 h-4 w-4 text-orange-500" />
             <span>Meu Plano (PRO)</span>
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => router.push('/perfil')} className="cursor-pointer">
+            <UserIcon className="mr-2 h-4 w-4" />
+            <span>Meu Perfil</span>
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={goToGarage} className="cursor-pointer">
             <Wrench className="mr-2 h-4 w-4" />
             <span>GiroGarage</span>

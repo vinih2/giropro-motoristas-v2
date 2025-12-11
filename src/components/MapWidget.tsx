@@ -6,8 +6,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MapContainer, TileLayer, Circle, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { Fuel, ThumbsUp } from 'lucide-react';
+import { Fuel, ThumbsUp, MapPin } from 'lucide-react';
 import GiroService from '@/services/giroService'; 
+import { cn } from '@/lib/utils';
 
 // --- ÍCONE DINÂMICO (SEM ARQUIVO PNG) ---
 const fuelIconSvg = renderToStaticMarkup(
@@ -64,6 +65,8 @@ const COORDENADAS: Record<string, [number, number]> = {
 
 interface MapWidgetProps {
   cidade: string;
+  className?: string;
+  hotspots?: Array<{ lat: number; lng: number; title: string; subtitle?: string }>;
 }
 
 interface CombustivelMarker {
@@ -77,7 +80,24 @@ interface CombustivelMarker {
     data_reporte?: string;
 }
 
-export default function MapWidget({ cidade }: MapWidgetProps) {
+const hotspotIconSvg = renderToStaticMarkup(
+  <div className="relative flex items-center justify-center w-8 h-8">
+    <div className="absolute w-full h-full bg-purple-500 rounded-full opacity-30 animate-ping"></div>
+    <div className="relative z-10 w-6 h-6 bg-purple-600 border-2 border-white rounded-full shadow-lg flex items-center justify-center text-white">
+      <MapPin size={12} />
+    </div>
+  </div>
+);
+
+const hotspotIcon = L.divIcon({
+  html: hotspotIconSvg,
+  className: 'bg-transparent',
+  iconSize: [32, 32],
+  iconAnchor: [16, 16],
+  popupAnchor: [0, -16],
+});
+
+export default function MapWidget({ cidade, className, hotspots = [] }: MapWidgetProps) {
   const [isMounted, setIsMounted] = useState(false);
   const [precos, setPrecos] = useState<CombustivelMarker[]>([]);
   const center: [number, number] = useMemo(() => COORDENADAS[cidade] || COORDENADAS['São Paulo'], [cidade]);
@@ -86,19 +106,19 @@ export default function MapWidget({ cidade }: MapWidgetProps) {
     setIsMounted(true);
     
     const carregarPrecos = async () => {
-        console.log("🗺️ Buscando preços no mapa...");
-        const { data, error } = await GiroService.fetchPrecosProximos();
+      if (process.env.NODE_ENV !== 'production') console.debug("🗺️ Buscando preços no mapa...");
+      const { data, error } = await GiroService.fetchPrecosProximos();
         
-        if (error) {
-            console.error("❌ Erro ao buscar preços:", error);
-        }
+      if (error) {
+        if (process.env.NODE_ENV !== 'production') console.error("❌ Erro ao buscar preços:", error);
+      }
 
-        if (data && data.length > 0) {
-            console.log(`✅ Encontrados ${data.length} preços.`);
-            setPrecos(data as unknown as CombustivelMarker[]);
-        } else {
-            console.log("⚠️ Nenhum preço encontrado no banco.");
-        }
+      if (data && Array.isArray(data) && data.length > 0) {
+        if (process.env.NODE_ENV !== 'production') console.debug(`✅ Encontrados ${data.length} preços.`);
+        setPrecos(data as unknown as CombustivelMarker[]);
+      } else {
+        if (process.env.NODE_ENV !== 'production') console.debug("⚠️ Nenhum preço encontrado no banco.");
+      }
     };
     
     carregarPrecos();
@@ -106,14 +126,14 @@ export default function MapWidget({ cidade }: MapWidgetProps) {
 
   if (!isMounted) {
     return (
-      <div className="h-72 w-full bg-gray-100 dark:bg-gray-800 rounded-2xl animate-pulse flex items-center justify-center text-gray-400">
+      <div className={cn("w-full bg-gray-100 dark:bg-gray-800 rounded-3xl animate-pulse flex items-center justify-center text-gray-400", className)}>
         <span className="flex items-center gap-2"><Fuel className="animate-bounce" /> Carregando Mapa...</span>
       </div>
     );
   }
 
   return (
-    <div className="h-72 w-full rounded-2xl overflow-hidden shadow-lg border-2 border-gray-100 dark:border-gray-800 relative z-0">
+    <div className={cn("w-full rounded-3xl overflow-hidden shadow-xl border border-gray-100 dark:border-gray-800 relative z-0", className)}>
       <MapContainer 
         center={center} 
         zoom={13} 
@@ -154,6 +174,20 @@ export default function MapWidget({ cidade }: MapWidgetProps) {
                                 {p.data_reporte ? new Date(p.data_reporte).toLocaleDateString() : 'Hoje'}
                             </span>
                         </div>
+                    </div>
+                </Popup>
+            </Marker>
+        ))}
+        {hotspots.map((h, index) => (
+            <Marker
+                key={`hotspot-${index}`}
+                position={[h.lat, h.lng]}
+                icon={hotspotIcon}
+            >
+                <Popup>
+                    <div className="text-sm">
+                        <p className="font-bold text-gray-900">{h.title}</p>
+                        {h.subtitle && <p className="text-xs text-gray-500">{h.subtitle}</p>}
                     </div>
                 </Popup>
             </Marker>

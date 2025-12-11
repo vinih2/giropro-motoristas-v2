@@ -31,3 +31,14 @@ export interface ResultadoCusto {
     melhorOpcao: 'Gasolina' | 'Etanol';
   };
 }
+
+export interface DadosSimulador {
+  ganhoDiarioMedio: number;
+  custoDiarioMedio: number;
+  diasPorSemana: number;
+}
+
+export interface ResultadoSimulador {
+  lucroSemanal: number;
+  lucroMensal: number;
+}

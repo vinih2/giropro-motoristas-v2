@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
+type GeoResponseEntry = {
+  lat: number;
+  lon: number;
+};
+
+type WeatherResponse = {
+  weather: Array<{ main: string; description: string }>;
+  main: { temp: number };
+};
+
 // 1. Função para buscar o Clima (OpenWeather)
 async function getClima(cidade: string) {
   const apiKey = process.env.OPENWEATHER_API_KEY;
@@ -11,7 +21,7 @@ async function getClima(cidade: string) {
     const geoRes = await fetch(
       `http://api.openweathermap.org/geo/1.0/direct?q=${cidade},BR&limit=1&appid=${apiKey}`
     );
-    const geoData = await geoRes.json();
+    const geoData = (await geoRes.json()) as GeoResponseEntry[];
 
     if (!geoData.length) return null;
 
@@ -21,7 +31,7 @@ async function getClima(cidade: string) {
     const weatherRes = await fetch(
       `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&lang=pt_br&appid=${apiKey}`
     );
-    const weatherData = await weatherRes.json();
+    const weatherData = (await weatherRes.json()) as WeatherResponse;
 
     const clima = weatherData.weather[0];
     const temp = Math.round(weatherData.main.temp);
@@ -40,9 +50,14 @@ async function getClima(cidade: string) {
   }
 }
 
+type GenerateInsightBody = {
+  prompt?: string;
+  cidade?: string;
+};
+
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = (await request.json()) as GenerateInsightBody;
     const { prompt, cidade } = body;
 
     // 2. Prepara o Contexto do Clima
@@ -103,8 +118,8 @@ Se estiver seguro, vá para áreas de alta demanda (Shoppings/Escritórios).
       insight: "🚀 Giro registrado! Para análises personalizadas, configure a API da Groq no projeto."
     });
 
-  } catch (error: any) {
-    console.error("Erro API:", error);
+  } catch (error: unknown) {
+    console.error('Erro API:', error);
     return NextResponse.json(
       { insight: "O sistema de insights está indisponível no momento. Tente mais tarde." },
       { status: 500 }

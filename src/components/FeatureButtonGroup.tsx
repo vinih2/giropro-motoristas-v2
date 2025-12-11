@@ -8,7 +8,7 @@ interface FeatureButtonGroupProps {
   label: string;
   options: string[];
   selected: string;
-  onSelect: (value: string) => void;
+  onSelect: (value: any) => void;
   colorClass: string; // Ex: 'bg-orange-100 text-orange-700'
 }
 

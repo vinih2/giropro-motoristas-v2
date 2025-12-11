@@ -3,6 +3,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { 
   Home, 
   Map, 
@@ -11,7 +12,11 @@ import {
   BarChart3, 
   Crown, 
   Wallet,
-  LayoutDashboard // MUDANÇA: Ícone de Dashboard
+  LayoutDashboard, // MUDANÇA: Ícone de Dashboard
+  Calculator,
+  Zap,
+  MoreHorizontal,
+  ChevronDown
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import UserMenu from "./user-menu";
@@ -38,6 +43,78 @@ export default function Navbar() {
     { name: "Desempenho", href: "/desempenho", icon: BarChart3 },
   ];
 
+  const toolItems = [
+    { name: "Custo/km", href: "/custo-km", icon: Calculator },
+    { name: "Simulador", href: "/simulador", icon: Zap },
+  ];
+
+  // Componente para menu mobile
+  const MobileMoreMenu = ({ toolItems, additionalItems, pathname }: any) => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <div className="relative">
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex flex-col items-center justify-center w-full h-full gap-1 transition-all active:scale-95 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+        >
+          <MoreHorizontal className="w-6 h-6" />
+          <span className="text-[9px] font-bold uppercase tracking-wide">Mais</span>
+        </button>
+        {isOpen && (
+          <div className="absolute bottom-16 right-0 bg-white dark:bg-gray-900 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-800 min-w-max py-2 z-50">
+            {additionalItems.map((item: any) => {
+              const isActive = pathname === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setIsOpen(false)}
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-2 text-sm font-bold transition-colors",
+                    isActive
+                      ? "bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400"
+                      : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  )}
+                >
+                  <item.icon className="w-4 h-4" />
+                  {item.name}
+                </Link>
+              );
+            })}
+            {toolItems.map((item: any) => {
+              const isActive = pathname === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setIsOpen(false)}
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-2 text-sm font-bold transition-colors",
+                    isActive
+                      ? "bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400"
+                      : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  )}
+                >
+                  <item.icon className="w-4 h-4" />
+                  {item.name}
+                </Link>
+              );
+            })}
+            <div className="border-t border-gray-200 dark:border-gray-800 my-2" />
+            <Link
+              href="/giropro-plus"
+              onClick={() => setIsOpen(false)}
+              className="flex items-center gap-3 px-4 py-2 text-sm font-bold text-yellow-600 dark:text-yellow-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            >
+              <Crown className="w-4 h-4" />
+              PRO+
+            </Link>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <>
       {/* --- NAVBAR SUPERIOR (Desktop & Header Mobile App) --- */}
@@ -53,7 +130,7 @@ export default function Navbar() {
             </span>
           </Link>
 
-          <nav className="hidden md:flex items-center gap-1">
+          <nav className="hidden md:flex items-center gap-3">
             {navItems.map((item) => {
                const isActive = pathname === item.href;
                return (
@@ -72,19 +149,49 @@ export default function Navbar() {
                   </Link>
                );
             })}
+            
+            {/* Dropdown Mais */}
+            <div className="relative group">
+              <button className={cn(
+                "px-4 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-2",
+                "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+              )}>
+                <MoreHorizontal className="w-4 h-4" />
+                Mais
+              </button>
+              {/* Dropdown Menu */}
+              <div className="absolute right-0 mt-0 w-48 bg-white dark:bg-gray-900 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-800 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 py-2">
+                {toolItems.map((item) => {
+                  const isActive = pathname === item.href;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={cn(
+                        "flex items-center gap-3 px-4 py-2 text-sm font-bold transition-colors",
+                        isActive
+                          ? "bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400"
+                          : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                      )}
+                    >
+                      <item.icon className="w-4 h-4" />
+                      {item.name}
+                    </Link>
+                  );
+                })}
+                <div className="border-t border-gray-200 dark:border-gray-800 my-2" />
+                <Link
+                  href="/giropro-plus"
+                  className="flex items-center gap-3 px-4 py-2 text-sm font-bold text-yellow-600 dark:text-yellow-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                >
+                  <Crown className="w-4 h-4" />
+                  PRO+
+                </Link>
+              </div>
+            </div>
           </nav>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            <Link href="/giropro-plus">
-                <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="hidden sm:flex border border-orange-200 dark:border-orange-900/50 bg-orange-50 dark:bg-orange-900/10 text-orange-700 dark:text-orange-400 hover:bg-orange-100 hover:text-orange-800 rounded-full px-4 gap-2 group shadow-sm"
-                >
-                    <Crown className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                    <span className="font-bold text-xs uppercase tracking-wide">Seja PRO+</span>
-                </Button>
-            </Link>
             <ThemeToggle />
             <UserMenu />
           </div>
@@ -94,9 +201,7 @@ export default function Navbar() {
       {/* --- NAVBAR INFERIOR (Mobile Only) --- */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/90 dark:bg-gray-950/90 backdrop-blur-lg border-t border-gray-200 dark:border-gray-800 pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
         <div className="flex justify-around items-center h-16 px-1">
-          {navItems
-            .filter(i => !i.desktopOnly) 
-            .map((item) => {
+          {navItems.slice(0, 4).map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link
@@ -119,14 +224,10 @@ export default function Navbar() {
               </Link>
             );
           })}
+
+          {/* Mais Button */}
+          <MobileMoreMenu toolItems={toolItems} additionalItems={navItems.slice(4)} pathname={pathname} />
           
-          <Link
-            href="/giropro-plus"
-            className="flex flex-col items-center justify-center w-full h-full gap-1 text-yellow-600 dark:text-yellow-500 active:scale-95"
-          >
-            <Crown className="w-6 h-6" strokeWidth={2.5} />
-            <span className="text-[9px] font-black uppercase tracking-wide">PRO+</span>
-          </Link>
         </div>
       </nav>
     </>

@@ -8,12 +8,14 @@ import GiroDataService from '@/services/giroService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { 
-  Car, MapPin, Target, CheckCircle2, ArrowRight, 
-  Fuel, Zap, ChevronRight, Loader2 
+import {
+  Car, MapPin, Target, CheckCircle2,
+  Fuel, Zap, ChevronRight, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useUserProfile } from '@/hooks/useUserProfile';
+import { logAnalyticsEvent } from '@/services/analyticsService';
 // REMOVEMOS O ProtectedRoute daqui
 
 const STEPS = [
@@ -27,22 +29,51 @@ const CIDADES = ['São Paulo', 'Rio de Janeiro', 'Belo Horizonte', 'Curitiba', '
 // O conteúdo agora é a exportação padrão
 export default function OnboardingPage() {
   const { user, loading: authLoading } = useAuth(); // Verificação de auth interna
+  const { refresh } = useUserProfile();
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [guardLoading, setGuardLoading] = useState(true);
+  const [allowFlow, setAllowFlow] = useState(false);
 
   // Dados do Formulário
   const [tipoVeiculo, setTipoVeiculo] = useState('');
   const [cidade, setCidade] = useState('');
   const [meta, setMeta] = useState('');
 
+  useEffect(() => {
+    if (!authLoading && !user) {
+        router.push('/login');
+    }
+  }, [authLoading, user, router]);
+
+  useEffect(() => {
+    if (authLoading || !user) return;
+    let active = true;
+    setGuardLoading(true);
+    GiroDataService.getProfileStatus(user.id).then((status) => {
+        if (!active) return;
+        if (status.needsOnboarding) {
+            setAllowFlow(true);
+        } else if (status.needsProfileDetails) {
+            router.replace('/perfil?from=onboarding');
+        } else {
+            router.replace('/');
+        }
+    }).catch(() => setAllowFlow(true)).finally(() => {
+        if (active) setGuardLoading(false);
+    });
+
+    return () => { active = false; };
+  }, [authLoading, user, router]);
+
   const handleNext = async () => {
     if (step === 1 && !tipoVeiculo) return toast.error("Selecione um tipo de veículo.");
     if (step === 2 && !cidade) return toast.error("Selecione sua cidade.");
-    if (step === 3 && !meta) return toast.error("Defina uma meta diária.");
+    if (step === 3 && (!meta || Number(meta) < 10)) return toast.error("Defina uma meta diária válida (mínimo R$ 10).");
 
     if (step < 3) {
-      setStep(step + 1);
+      setStep((prev) => prev + 1);
     } else {
       await finishOnboarding();
     }
@@ -58,22 +89,43 @@ export default function OnboardingPage() {
     if (tipoVeiculo === 'Carro Flex') custoEstimado = 0.60;
 
     // Salva no Supabase (usando upsert)
-    // @ts-ignore
+    const metaValue = Number(meta);
+    const kmMetaPadrao = 200;
+    const minLucroRecomendado = Math.max(0.5, parseFloat((custoEstimado * 1.3).toFixed(2)));
     const { error } = await GiroDataService.updateUserProfile(user.id, {
-        meta_diaria: parseFloat(meta),
+        meta_diaria: metaValue,
         cidade_padrao: cidade,
-        custo_km: custoEstimado
+        custo_km: custoEstimado,
+        km_meta_diaria: kmMetaPadrao,
+        min_lucro_km: minLucroRecomendado,
+        onboarding_steps: ['vehicle', 'region', 'goal'],
+        language: 'pt-BR',
+        full_name: user.user_metadata?.full_name || undefined
     });
 
-    if (!error) {
-         // @ts-ignore
-         try { await GiroDataService.upsertVehicle(user.id, { km_atual: 0, modelo: 'Meu Veículo' }); } catch {}
+    if (!error && tipoVeiculo) {
+         const { error: vehicleError } = await GiroDataService.upsertVehicle(user.id, { 
+            km_atual: 0, 
+            km_oleo: 0,
+            km_pneu: 0,
+            km_correia: 0,
+            modelo: tipoVeiculo 
+         });
+         if (vehicleError) {
+            console.warn('Não foi possível salvar veículo inicial.', vehicleError);
+         }
     }
 
     if (!error) {
         toast.success("Perfil configurado! Vamos faturar. 🚀");
         if (typeof window !== 'undefined') localStorage.setItem('onboarding_complete', 'true');
-        router.push('/'); // Manda para o Dashboard
+        logAnalyticsEvent(user.id, 'onboarding_completed', {
+          cidade,
+          meta_diaria: metaValue,
+          tipo_veiculo: tipoVeiculo,
+        }).catch(() => {});
+        await refresh().catch(() => {});
+        router.push('/');
     } else {
         toast.error("Erro ao salvar perfil.");
     }
@@ -81,7 +133,7 @@ export default function OnboardingPage() {
   };
 
   // --- Verificação de Auth (Substitui o ProtectedRoute) ---
-  if (authLoading) {
+  if (authLoading || guardLoading) {
       return (
           <div className="min-h-screen flex items-center justify-center bg-white dark:bg-black">
               <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
@@ -89,12 +141,21 @@ export default function OnboardingPage() {
       );
   }
 
-  if (!user) {
-      // Se não tem usuário, não deveria estar aqui. Volta ao login.
-      router.push('/login');
+  if (!allowFlow) {
       return null;
   }
   // --- Fim da Verificação ---
+
+  const formattedMeta = meta ? Number(meta).toLocaleString('pt-BR') : '';
+
+  const handleMetaInput = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 6);
+    setMeta(digits);
+  };
+
+  const handleMetaPreset = (val: number) => {
+    setMeta(String(val));
+  };
 
   return (
     <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center p-6">
@@ -173,17 +234,18 @@ export default function OnboardingPage() {
                             <div className="relative">
                                 <span className="absolute left-6 top-1/2 -translate-y-1/2 text-2xl font-bold text-gray-400">R$</span>
                                 <Input 
-                                    type="number" 
+                                    type="text" 
+                                    inputMode="numeric"
                                     placeholder="200" 
-                                    value={meta}
+                                    value={formattedMeta}
                                     autoFocus
-                                    onChange={(e) => setMeta(e.target.value)}
+                                    onChange={(e) => handleMetaInput(e.target.value)}
                                     className="h-24 pl-16 text-5xl font-black rounded-3xl bg-gray-50 dark:bg-gray-800 border-0 focus:ring-0"
                                 />
                             </div>
                             <div className="flex gap-2 justify-center">
                                 {[150, 200, 300, 400].map(val => (
-                                    <button key={val} onClick={() => setMeta(val.toString())} className="px-4 py-2 rounded-full bg-gray-100 dark:bg-gray-800 text-sm font-bold hover:bg-orange-100 hover:text-orange-600 transition-colors">
+                                    <button key={val} onClick={() => handleMetaPreset(val)} className="px-4 py-2 rounded-full bg-gray-100 dark:bg-gray-800 text-sm font-bold hover:bg-orange-100 hover:text-orange-600 transition-colors">
                                         R$ {val}
                                     </button>
                                 ))}

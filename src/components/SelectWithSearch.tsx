@@ -2,7 +2,7 @@
 'use client';
 
 import * as React from "react";
-import { Check, ChevronDown, Loader2, X } from "lucide-react";
+import { Check, ChevronDown, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,7 @@ interface SelectWithSearchProps {
   options: FipeOption[];
   selectedValue: string;
   onSelect: (value: string) => void;
-  isLoading?: boolean;
+  loading?: boolean;
   disabled?: boolean;
   onClear: () => void;
 }

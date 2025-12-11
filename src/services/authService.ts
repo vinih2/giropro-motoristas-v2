@@ -1,12 +1,8 @@
 // src/services/authService.ts
 
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { User, Session } from "@supabase/supabase-js";
-// Reutiliza a interface Registro que está em lib/supabase.ts
-import { Registro } from "@/lib/supabase"; 
-
-// A instância do Supabase (criada no lib/supabase.ts)
-const supabase = createClientComponentClient(); 
+// Reutiliza a interface Registro e cliente compartilhado
+import { supabase, Registro } from "@/lib/supabase"; 
 
 export type { User, Session, Registro };
 
@@ -27,6 +23,7 @@ export const authService = {
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/`,
+        scopes: 'openid profile email',
       },
     });
   },

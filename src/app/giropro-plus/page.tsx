@@ -1,52 +1,24 @@
 // src/app/giropro-plus/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
 import { 
   Check, Crown, Zap, FileText, ShieldCheck, 
-  History, Wrench, ChevronRight 
+  History, Wrench, ChevronRight, Gauge 
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
-import GiroDataService from '@/services/giroService';
-import { useRouter } from 'next/navigation';
+import { useUserProfile } from '@/hooks/useUserProfile';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import PaywallButton from '@/components/PaywallButton';
+import Link from 'next/link';
 
 export default function GiroProPlusPage() {
   const { user } = useAuth();
-  const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [isPro, setIsPro] = useState(false);
-
-  useEffect(() => {
-    if (user) {
-      GiroDataService.fetchUserProfile(user.id).then(({ data }) => {
-        // @ts-ignore
-        if (data?.is_pro) setIsPro(true);
-      });
-    }
-  }, [user]);
-
-  const handleSubscribe = async () => {
-    if (!user) return;
-    setLoading(true);
-
-    // --- SIMULAÇÃO DE PAGAMENTO ---
-    // @ts-ignore
-    const { error } = await GiroDataService.updateUserProfile(user.id, { is_pro: true });
-
-    if (!error) {
-        toast.success("👑 Parabéns! Você agora é GiroPro+!");
-        setIsPro(true);
-        setTimeout(() => router.push('/'), 2000);
-    } else {
-        toast.error("Erro ao processar assinatura. Tente novamente.");
-    }
-    setLoading(false);
-  };
+  const { profile } = useUserProfile();
+  const isPro = !!profile?.is_pro;
 
   return (
     <ProtectedRoute>
@@ -72,59 +44,56 @@ export default function GiroProPlusPage() {
           
           {/* BENEFÍCIOS (ESQUERDA) */}
           <div className="lg:col-span-2 space-y-6">
-            
-            {/* Feature 1: GiroGarage (NOVO) */}
-            <div className="flex gap-4 items-start p-6 bg-white dark:bg-gray-900 rounded-2xl shadow-sm border-l-4 border-l-orange-500 border-y border-r border-gray-100 dark:border-gray-800 hover:shadow-md transition-shadow">
-                <div className="bg-orange-100 dark:bg-orange-900/30 p-3 rounded-xl">
-                    <Wrench className="w-8 h-8 text-orange-600 dark:text-orange-400" />
+            {[
+                {
+                    icon: ShieldCheck,
+                    title: 'Compliance & Tributos automáticos',
+                    desc: 'Gere DARF/DAS com CPF e alíquota personalizada, receba lembretes e registre pagamento em um clique.',
+                    badge: 'NOVO',
+                },
+                {
+                    icon: History,
+                    title: 'Histórico infinito + Desempenho avançado',
+                    desc: 'Gráficos de ticket diário, comparativos mensais e análises IA exclusivas.',
+                },
+                {
+                    icon: Wrench,
+                    title: 'GiroGarage inteligente',
+                    desc: 'Alertas de manutenção baseados no seu KM real, projeção de custos e histórico para comprovação.',
+                },
+                {
+                    icon: Zap,
+                    title: 'Missões e Insights IA ilimitados',
+                    desc: 'Coach inteligente 24/7 para planejar rotas, metas e otimizar ganhos.',
+                },
+                {
+                    icon: FileText,
+                    title: 'Relatórios oficiais e PDFs premium',
+                    desc: 'Comprovantes prontos para bancos, locadoras e contadores sem marca d’água.',
+                },
+                {
+                    icon: Gauge,
+                    title: 'Hotspots em tempo real',
+                    desc: 'Mapa com hotspots validados, detalhes via Place ID e integração direta com simulador.',
+                    badge: 'AO VIVO'
+                },
+                {
+                    icon: Zap,
+                    title: 'Mentoria GiroGuard + WhatsApp',
+                    desc: 'Alertas instantâneos e acionamento de mentors direto pelo app quando um giro desvia do plano.',
+                }
+            ].map(feature => (
+                <div key={feature.title} className="p-6 bg-white dark:bg-gray-900 rounded-2xl shadow-md border border-gray-100 dark:border-gray-800 hover:shadow-xl transition-shadow">
+                    <div className="flex items-center justify-between">
+                        <div className="p-3 rounded-xl bg-orange-50 dark:bg-orange-900/30">
+                            <feature.icon className="w-8 h-8 text-orange-600 dark:text-orange-400" />
+                        </div>
+                        {feature.badge && <Badge variant="secondary" className="bg-orange-500 text-white">{feature.badge}</Badge>}
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-white mt-4">{feature.title}</h3>
+                    <p className="text-gray-600 dark:text-gray-300 mt-2 text-sm leading-relaxed">{feature.desc}</p>
                 </div>
-                <div>
-                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">GiroGarage: Mecânico Virtual</h3>
-                    <p className="text-gray-600 dark:text-gray-400 mt-2">
-                        Controle automático de troca de óleo, pneus e correia baseado no seu KM rodado. Receba alertas antes do problema acontecer.
-                    </p>
-                </div>
-            </div>
-
-            {/* Feature 2: Relatórios */}
-            <div className="flex gap-4 items-start p-6 bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 hover:shadow-md transition-shadow">
-                <div className="bg-blue-100 dark:bg-blue-900/30 p-3 rounded-xl">
-                    <FileText className="w-8 h-8 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div>
-                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">Relatórios Oficiais em PDF</h3>
-                    <p className="text-gray-600 dark:text-gray-400 mt-2">
-                        Chega de planilha. Gere comprovantes de renda profissionais para financiamentos, aluguel e declaração de MEI/IR com um clique.
-                    </p>
-                </div>
-            </div>
-
-            {/* Feature 3: Histórico */}
-            <div className="flex gap-4 items-start p-6 bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 hover:shadow-md transition-shadow">
-                <div className="bg-green-100 dark:bg-green-900/30 p-3 rounded-xl">
-                    <History className="w-8 h-8 text-green-600 dark:text-green-400" />
-                </div>
-                <div>
-                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">Histórico Ilimitado</h3>
-                    <p className="text-gray-600 dark:text-gray-400 mt-2">
-                        O plano grátis limita a visualização. No Pro+, você acessa cada corrida, cada ganho e cada KM desde o seu primeiro dia de uso.
-                    </p>
-                </div>
-            </div>
-
-            {/* Feature 4: IA Avançada */}
-            <div className="flex gap-4 items-start p-6 bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 hover:shadow-md transition-shadow">
-                <div className="bg-purple-100 dark:bg-purple-900/30 p-3 rounded-xl">
-                    <Zap className="w-8 h-8 text-purple-600 dark:text-purple-400" />
-                </div>
-                <div>
-                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">Coach IA Ilimitado</h3>
-                    <p className="text-gray-600 dark:text-gray-400 mt-2">
-                        Análises profundas de desempenho semanal e mensal. Pergunte ao Coach onde melhorar e receba estratégias personalizadas.
-                    </p>
-                </div>
-            </div>
-
+            ))}
           </div>
 
           {/* CARTÃO DE PREÇO (DIREITA - STICKY) */}
@@ -135,7 +104,7 @@ export default function GiroProPlusPage() {
                     <div className="mx-auto bg-gradient-to-br from-yellow-100 to-orange-100 dark:from-yellow-900/40 dark:to-orange-900/40 w-20 h-20 rounded-full flex items-center justify-center mb-4 shadow-inner">
                         <Crown className="w-10 h-10 text-orange-600 dark:text-orange-400" />
                     </div>
-                    <CardTitle className="text-3xl font-black text-gray-900 dark:text-white">Assinatura Pro</CardTitle>
+                    <CardTitle className="text-3xl font-black text-gray-900 dark:text-white">Assinatura Pro+</CardTitle>
                     <CardDescription className="text-base">Invista na sua carreira.</CardDescription>
                 </CardHeader>
                 <CardContent className="text-center space-y-6">
@@ -151,10 +120,11 @@ export default function GiroProPlusPage() {
                     <p className="text-sm text-gray-500 font-medium">Menos que uma corrida mínima por mês.</p>
                     
                     <div className="border-t border-gray-100 dark:border-gray-800 pt-6 space-y-3 text-left text-sm">
-                        <div className="flex items-center gap-3"><div className="bg-green-100 p-1 rounded-full"><Check className="w-3 h-3 text-green-600"/></div> <span className="font-medium">GiroGarage (Manutenção)</span></div>
-                        <div className="flex items-center gap-3"><div className="bg-green-100 p-1 rounded-full"><Check className="w-3 h-3 text-green-600"/></div> <span className="font-medium">Relatórios PDF Oficiais</span></div>
-                        <div className="flex items-center gap-3"><div className="bg-green-100 p-1 rounded-full"><Check className="w-3 h-3 text-green-600"/></div> <span className="font-medium">Histórico Infinito</span></div>
-                        <div className="flex items-center gap-3"><div className="bg-green-100 p-1 rounded-full"><Check className="w-3 h-3 text-green-600"/></div> <span className="font-medium">Sem Anúncios</span></div>
+                        <div className="flex items-center gap-3"><div className="bg-green-100 p-1 rounded-full"><Check className="w-3 h-3 text-green-600"/></div> <span className="font-medium">Compliance tributário automatizado</span></div>
+                        <div className="flex items-center gap-3"><div className="bg-green-100 p-1 rounded-full"><Check className="w-3 h-3 text-green-600"/></div> <span className="font-medium">Desempenho mensal com IA ilimitada</span></div>
+                        <div className="flex items-center gap-3"><div className="bg-green-100 p-1 rounded-full"><Check className="w-3 h-3 text-green-600"/></div> <span className="font-medium">GiroGarage completo</span></div>
+                        <div className="flex items-center gap-3"><div className="bg-green-100 p-1 rounded-full"><Check className="w-3 h-3 text-green-600"/></div> <span className="font-medium">Simulador Pro+ (cenários avançados)</span></div>
+                        <div className="flex items-center gap-3"><div className="bg-green-100 p-1 rounded-full"><Check className="w-3 h-3 text-green-600"/></div> <span className="font-medium">Relatórios premium e histórico total</span></div>
                     </div>
                 </CardContent>
                 <CardFooter className="pb-8">
@@ -163,19 +133,18 @@ export default function GiroProPlusPage() {
                             <Check className="mr-2 w-6 h-6" /> VOCÊ JÁ É PRO
                         </Button>
                     ) : (
-                        <Button 
-                            onClick={handleSubscribe} 
-                            disabled={loading}
-                            className="w-full h-16 text-xl font-bold bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 shadow-orange-500/30 shadow-xl rounded-xl group transition-all hover:scale-[1.02]"
-                        >
-                            {loading ? 'Processando...' : (
-                                <span className="flex items-center gap-2">
-                                    QUERO SER PRO <ChevronRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
-                                </span>
-                            )}
-                        </Button>
+                        <PaywallButton 
+                          priceLabel="QUERO SER PRO"
+                          variant="default"
+                          fullWidth
+                        />
                     )}
                 </CardFooter>
+                <p className="text-xs text-center text-gray-400 dark:text-gray-300 px-6 -mt-4">
+                    Ao continuar você concorda com os <Link href="/termos" className="text-orange-600 font-semibold">Termos de Serviço</Link>, a{' '}
+                    <Link href="/privacidade" className="text-orange-600 font-semibold">Política de Privacidade</Link> e a{' '}
+                    <Link href="/cancelamento" className="text-orange-600 font-semibold">Política de Cancelamento</Link>.
+                </p>
             </Card>
             
             <div className="mt-6 flex items-center justify-center gap-2 text-xs text-gray-400 font-medium">
@@ -183,6 +152,49 @@ export default function GiroProPlusPage() {
             </div>
           </div>
 
+        </div>
+
+        <div className="mt-16 grid md:grid-cols-2 gap-6">
+            <Card className="border border-gray-100 dark:border-gray-800 shadow-md">
+                <CardHeader>
+                    <CardTitle className="text-xl font-black text-gray-900 dark:text-white">Plano gratuito</CardTitle>
+                    <CardDescription className="text-sm">Acompanhe o dia a dia sem custo.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2 text-gray-600 dark:text-gray-300 text-sm">
+                    <div className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-500" /> Dashboard diário com registro de giros</div>
+                    <div className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-500" /> Histórico limitado (últimos 7 giros)</div>
+                    <div className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-500" /> Insights IA (3 missões/dia)</div>
+                    <div className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-500" /> Radar colaborativo de combustível</div>
+                </CardContent>
+            </Card>
+            <Card className="border-2 border-orange-400 shadow-lg">
+                <CardHeader>
+                    <CardTitle className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
+                        GiroPro+ completo <Badge variant="secondary" className="bg-orange-500 text-white">Recomendado</Badge>
+                    </CardTitle>
+                    <CardDescription className="text-sm">Ferramentas para quem vive do app.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2 text-gray-700 dark:text-gray-200 text-sm">
+                    <div className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-500" /> Compliance e relatórios bancários</div>
+                    <div className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-500" /> Desempenho e histórico ilimitados</div>
+                    <div className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-500" /> GiroGarage automatizado</div>
+                    <div className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-500" /> Simulador Pro+ de cenários</div>
+                    <div className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-500" /> Missões IA sem limite + suporte prioritário</div>
+                </CardContent>
+                <CardFooter className="pt-4">
+                  {isPro ? (
+                    <Button disabled className="w-full" variant="secondary">
+                      ✓ Você já é Pro+
+                    </Button>
+                  ) : (
+                    <PaywallButton 
+                      priceLabel="Começar 7 dias grátis"
+                      variant="default"
+                      fullWidth
+                    />
+                  )}
+                </CardFooter>
+            </Card>
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 import "./globals.css";
 import Navbar from "@/components/custom/navbar";
-import { ThemeProvider } from "@/components/ui/theme-provider"; // ✅ Importar
-import { Toaster } from "@/components/ui/toaster"; // ✅ Adicionar Toaster se não tiver
+import { ThemeProvider } from "next-themes";
+import { Toaster } from "@/components/ui/sonner";
 
 export default function RootLayout({
   children,

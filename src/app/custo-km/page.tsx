@@ -4,22 +4,26 @@
 import { useState } from 'react';
 import { TipoVeiculo } from '@/lib/types';
 import { calcularCustoPorKm, formatarMoeda } from '@/lib/calculations';
-import { 
-    Fuel, Zap, TrendingDown, Car, Gauge, Plug, Leaf, BatteryCharging 
-} from 'lucide-react';
-import FipeCalculator from '@/components/FipeCalculator'; 
+import { Fuel, Zap, TrendingDown, Car, Gauge, Plug, Leaf, BatteryCharging, Lightbulb } from 'lucide-react';
+import FipeCalculator from '@/components/FipeCalculator';
 import FeatureButtonGroup from '@/components/FeatureButtonGroup';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
+import { toast } from 'sonner';
+import { useAuth } from '@/hooks/useAuth';
+import GiroService from '@/services/giroService';
 
 function CustoKmContent() {
+  const { user } = useAuth();
   const [tipoVeiculo, setTipoVeiculo] = useState<TipoVeiculo>('Carro Flex');
   const [consumo, setConsumo] = useState('');
   const [preco, setPreco] = useState('');
-  const [resultado, setResultado] = useState<any>(null);
+  const [resultado, setResultado] = useState<ReturnType<typeof calcularCustoPorKm> | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
 
   const tiposVeiculo: TipoVeiculo[] = ['Carro Flex', 'Moto', 'Elétrico', 'Diesel'];
   const isEletrico = tipoVeiculo === 'Elétrico';
@@ -53,7 +57,7 @@ function CustoKmContent() {
       heroIcon: Car
   };
 
-  const handleCalcular = () => {
+  const handleCalcular = async () => {
     const c = parseFloat(consumo);
     const p = parseFloat(preco);
     if (!c || !p) return;
@@ -66,24 +70,44 @@ function CustoKmContent() {
     if (typeof window !== 'undefined') {
         localStorage.setItem('custoPorKm', calc.custoPorKm.toFixed(2));
     }
+
+    if (user) {
+      setSavingProfile(true);
+      const { error } = await GiroService.updateUserProfile(user.id, { custo_km: calc.custoPorKm });
+      setSavingProfile(false);
+      if (error) {
+        toast.error('Não foi possível sincronizar com o dashboard.');
+      } else {
+        toast.success('Custo/km atualizado em todo o app.');
+      }
+    } else {
+      toast.info('Faça login para sincronizar este custo com o dashboard.');
+    }
   };
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black pb-32 pt-8 px-4 font-sans transition-colors duration-500">
-      <div className="max-w-2xl mx-auto space-y-8">
+      <div className="max-w-4xl mx-auto space-y-8">
         
-        <div className="text-center space-y-2">
-            <div className={cn("mx-auto w-16 h-16 rounded-2xl flex items-center justify-center mb-4 shadow-lg transition-all duration-500 bg-gradient-to-br", theme.gradient)}>
-                <theme.heroIcon className="w-8 h-8 text-white" />
+        <div className="text-center space-y-3">
+            <div className={cn("mx-auto w-20 h-20 rounded-3xl flex items-center justify-center mb-2 shadow-2xl transition-all duration-500 bg-gradient-to-br", theme.gradient)}>
+                <theme.heroIcon className="w-10 h-10 text-white" />
             </div>
-            <h1 className="text-3xl font-black text-zinc-900 dark:text-white tracking-tight">Custo Real</h1>
-            <p className="text-zinc-500 font-medium">
-                {isEletrico ? 'Cálculo de eficiência energética' : 'Quanto seu carro gasta por KM?'}
+            <h1 className="text-4xl font-black text-zinc-900 dark:text-white tracking-tight">Custo Real por KM</h1>
+            <p className="text-sm text-zinc-500 font-medium max-w-lg mx-auto">
+                Atualize seu custo por quilômetro e sincronize com o dashboard, simulador e DARF. Essa é a sua base para precificar corridas e entender lucro.
             </p>
         </div>
 
+        {/* KPIs */}
+        <div className="grid sm:grid-cols-3 gap-3">
+            <KpiCard label="Custo salvo" value={resultado ? formatarMoeda(resultado.custoPorKm) : "--"} hint="/km" />
+            <KpiCard label="Recomendado" value={isEletrico ? "⚡ Energia" : "Combustível"} hint={tipoVeiculo} />
+            <KpiCard label="Ajuste automático" value="Ligado" hint="Impacta novo giro" />
+        </div>
+
         {/* CARD CALCULADORA */}
-        <Card className="border-0 shadow-xl bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden ring-1 ring-zinc-100 dark:ring-zinc-800">
+        <Card className="border-0 shadow-2xl bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden ring-1 ring-zinc-100 dark:ring-zinc-800">
             <div className={cn("h-2 bg-gradient-to-r transition-all duration-500", theme.gradient)}></div>
             <CardContent className="p-8 space-y-8">
                 
@@ -122,8 +146,12 @@ function CustoKmContent() {
                     </div>
                 </div>
 
-                <Button onClick={handleCalcular} className={cn("w-full h-14 text-lg font-bold text-white rounded-2xl shadow-lg active:scale-95 transition-all", theme.button)}>
-                    {isEletrico ? 'Calcular Energia' : 'Calcular Custo'}
+                <Button
+                    onClick={handleCalcular}
+                    disabled={savingProfile}
+                    className={cn("w-full h-14 text-lg font-bold text-white rounded-2xl shadow-lg active:scale-95 transition-all disabled:opacity-60", theme.button)}
+                >
+                    {savingProfile ? 'Sincronizando...' : isEletrico ? 'Calcular Energia' : 'Calcular Custo'}
                 </Button>
                 
                 {/* Resultado */}
@@ -168,8 +196,33 @@ function CustoKmContent() {
             </CardContent>
         </Card>
 
-        {/* COMPONENTE FIPE */}
-        <div className="pt-4">
+        {/* INSIGHTS & FIPE */}
+        {resultado && (
+          <Card className="border border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 rounded-3xl shadow-lg">
+            <CardContent className="p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="bg-zinc-100 dark:bg-zinc-800 p-2 rounded-lg"><Lightbulb className="w-5 h-5 text-yellow-500"/></div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.35em] font-bold text-zinc-400">Insight rápido</p>
+                  <h3 className="text-xl font-black text-zinc-900 dark:text-white">Onde otimizar agora</h3>
+                </div>
+              </div>
+              <ul className="grid sm:grid-cols-2 gap-3 text-sm text-zinc-600 dark:text-zinc-300">
+                <li className="p-3 rounded-2xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/40">
+                  🔧 Ajuste o custo salvo para {formatarMoeda(resultado.custoPorKm)} no dashboard. Isso atualiza metas e DARF automaticamente.
+                </li>
+                <li className="p-3 rounded-2xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/40">
+                  🏙️ Considere rodar {isEletrico ? 'na madrugada (energia mais barata)' : 'em regiões com GNV disponível'} para reduzir ainda mais.
+                </li>
+              </ul>
+              <Button onClick={() => toast.success('Valor aplicado ao dashboard!')} className="w-full rounded-2xl bg-zinc-900 text-white hover:bg-zinc-800">
+                Aplicar custo ao dashboard
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="pt-4 space-y-6">
             <div className="flex items-center gap-3 mb-4 px-2">
                 <div className="bg-zinc-100 dark:bg-zinc-800 p-2 rounded-lg"><Car className="w-5 h-5 text-zinc-500 dark:text-zinc-400"/></div>
                 <div>
@@ -178,6 +231,19 @@ function CustoKmContent() {
                 </div>
             </div>
             <FipeCalculator />
+
+            <Card className="border-0 shadow-xl bg-gradient-to-br from-gray-900 via-black to-gray-800 text-white rounded-3xl">
+              <CardContent className="p-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.35em] text-gray-400 font-bold">Ferramentas Pro</p>
+                  <h3 className="text-2xl font-black">Simulator Boost</h3>
+                  <p className="text-sm text-gray-300">Compare bairros, tipo de veículo e consumo real. Ideal para planejar upgrade de carro.</p>
+                </div>
+                <Link href="/simulador" className="inline-flex">
+                  <Button className="rounded-full bg-orange-500 hover:bg-orange-600 px-6">Abrir simulador PRO</Button>
+                </Link>
+              </CardContent>
+            </Card>
         </div>
 
       </div>
@@ -187,4 +253,20 @@ function CustoKmContent() {
 
 export default function CustoKm() {
   return <ProtectedRoute><CustoKmContent /></ProtectedRoute>;
+}
+
+type KpiCardProps = {
+  label: string;
+  value: string;
+  hint?: string;
+};
+
+function KpiCard({ label, value, hint }: KpiCardProps) {
+  return (
+    <div className="p-4 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 shadow-sm">
+      <p className="text-[10px] uppercase tracking-[0.35em] font-bold text-zinc-400">{label}</p>
+      <p className="text-2xl font-black text-zinc-900 dark:text-white mt-1">{value}</p>
+      {hint && <p className="text-xs text-zinc-500">{hint}</p>}
+    </div>
+  );
 }

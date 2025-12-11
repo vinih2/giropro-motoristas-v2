@@ -1,23 +1,30 @@
 // src/app/insights/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Plataforma } from '@/lib/types';
-import { 
-  MapPin, Fuel, Loader2, Navigation, BrainCircuit, ChevronRight, 
-  Cloud, CloudRain, Sun, Check, ArrowRight, Sparkles, Zap, DollarSign, Plus
-} from 'lucide-react';
+import { Cloud, CloudRain, Sun } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerTrigger } from '@/components/ui/drawer';
-import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/useAuth';
-import GiroService from '@/services/giroService'; 
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils'; 
+import { useUserProfile } from '@/hooks/useUserProfile';
 import ProtectedRoute from '@/components/ProtectedRoute'; 
+import { useFeatureFlags } from '@/context/FeatureFlagsContext';
+import { useRouter } from 'next/navigation';
+import { fetchHotspots, fetchHotspotDetails, Hotspot, HotspotDetails } from '@/services/placesService';
+import { queueRegistroPrefill, queueSimuladorPrefill, readStoredSimuladorScenarios, StoredSimuladorScenario, SIMULADOR_SCENARIOS_SYNC_EVENT, persistStoredSimuladorScenarios } from '@/lib/dashboard-bridge';
+import { HotspotList } from '@/components/insights/HotspotList';
+import { InsightsHeader } from '@/components/insights/InsightsHeader';
+const InsightsMapSection = dynamic(() => import('@/components/insights/InsightsMapSection').then((mod) => mod.InsightsMapSection), {
+  ssr: false,
+  loading: () => <div className="h-[420px] md:h-[560px] rounded-[32px] bg-gray-100 dark:bg-gray-900 animate-pulse" />,
+});
+import { InsightsSidebar } from '@/components/insights/InsightsSidebar';
+import { InsightsFavoriteScenarios } from '@/components/insights/InsightsFavoriteScenarios';
+import { ScenarioTagDialog } from '@/components/insights/ScenarioTagDialog';
+import { InsightsGettingStarted } from '@/components/insights/InsightsGettingStarted';
+import { fetchSimulatorFavorites, replaceSimulatorFavorites } from '@/services/simulatorFavoritesService';
+import { logAnalyticsEvent } from '@/services/analyticsService';
 
 // --- LISTA DE CIDADES (MOVIDA PARA O ESCOPO GLOBAL DESTE ARQUIVO) ---
 const CIDADES_PRINCIPAIS = [
@@ -25,131 +32,324 @@ const CIDADES_PRINCIPAIS = [
   'Curitiba', 'Manaus', 'Recife', 'Porto Alegre', 'Belém', 'Goiânia', 'Guarulhos', 
   'Campinas', 'São Luís', 'São Gonçalo', 'Maceió', 'Duque de Caxias', 'Natal'
 ];
-const TIPOS_COMBUSTIVEL = ['gasolina', 'etanol', 'diesel'];
+const getTodayStamp = () => new Date().toISOString().split('T')[0];
+const getUsageKey = (userId: string) => `insights_ia_uses_${userId}`;
+const GETTING_STARTED_KEY = 'insights_getting_started';
+type ClimaData = {
+  temp: number;
+  descricao: string;
+  icon: string;
+  principal: string;
+  hourly: Array<{
+    time: string;
+    temp: number;
+    main: string;
+    description: string;
+    icon: string;
+    rainChance: number;
+    wind: number;
+  }>;
+} | null;
 
-// Mapa com Loading Skeleton Bonito
-const MapWidget = dynamic(() => import('@/components/MapWidget'), { 
-  ssr: false,
-  loading: () => (
-    <div className="h-[calc(100vh-160px)] md:h-[calc(100vh-120px)] w-full bg-gray-100 dark:bg-gray-800 rounded-2xl animate-pulse flex flex-col items-center justify-center gap-3 border-2 border-dashed border-gray-200 dark:border-gray-700">
-        <div className="bg-white dark:bg-gray-700 p-4 rounded-full shadow-sm">
-            <MapPin className="w-8 h-8 text-gray-300" />
-        </div>
-        <span className="text-xs text-gray-400 font-bold uppercase tracking-widest">Carregando Satélite...</span>
-    </div>
-  )
-});
+const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
+  'São Paulo': { lat: -23.5505, lng: -46.6333 },
+  'Rio de Janeiro': { lat: -22.9068, lng: -43.1729 },
+  'Belo Horizonte': { lat: -19.9167, lng: -43.9345 },
+  'Brasília': { lat: -15.7801, lng: -47.9292 },
+  'Salvador': { lat: -12.9777, lng: -38.5016 },
+  'Fortaleza': { lat: -3.7172, lng: -38.5433 },
+  'Curitiba': { lat: -25.4284, lng: -49.2733 },
+  'Manaus': { lat: -3.119, lng: -60.0217 },
+  'Recife': { lat: -8.0543, lng: -34.8813 },
+  'Porto Alegre': { lat: -30.0346, lng: -51.2177 },
+  'Goiânia': { lat: -16.6869, lng: -49.2648 },
+  'Belém': { lat: -1.4558, lng: -48.4902 },
+  'Guarulhos': { lat: -23.4542, lng: -46.5337 },
+  'Campinas': { lat: -22.9099, lng: -47.0626 },
+  'São Luís': { lat: -2.5307, lng: -44.3068 },
+  'São Gonçalo': { lat: -22.8275, lng: -43.0632 },
+  'Maceió': { lat: -9.6662, lng: -35.7351 },
+  'Duque de Caxias': { lat: -22.7923, lng: -43.3082 },
+  'Natal': { lat: -5.7945, lng: -35.211 },
+  'Campo Grande': { lat: -20.4697, lng: -54.6201 },
+  'Teresina': { lat: -5.0919, lng: -42.8034 },
+  'João Pessoa': { lat: -7.1195, lng: -34.845 },
+  'Florianópolis': { lat: -27.5954, lng: -48.548 },
+  'Cuiabá': { lat: -15.6014, lng: -56.0979 },
+  'Aracaju': { lat: -10.9472, lng: -37.0731 },
+  'Vitória': { lat: -20.3194, lng: -40.3377 },
+};
 
-// --- COMPONENTE DRAWER DE PREÇO (Refinado) ---
-function PriceSubmissionDrawer({ cidade }: { cidade: string }) {
-    const { user } = useAuth();
-    const [posto, setPosto] = useState('');
-    const [preco, setPreco] = useState('');
-    const [tipo, setTipo] = useState(TIPOS_COMBUSTIVEL[0]);
-    const [loadingLocation, setLoadingLocation] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
-    const [location, setLocation] = useState<{ lat: number, lon: number } | null>(null);
+const parseDistanceKm = (text?: string) => {
+  if (!text) return 0;
+  const match = text.match(/([\d.,]+)/);
+  if (!match) return 0;
+  return parseFloat(match[1].replace(',', '.'));
+};
 
-    const handleGetLocation = () => {
-        if (!navigator.geolocation) return toast.error("GPS não suportado.");
-        setLoadingLocation(true);
-        navigator.geolocation.getCurrentPosition(
-            (pos) => {
-                setLocation({ lat: pos.coords.latitude, lon: pos.coords.longitude });
-                setLoadingLocation(false);
-                toast.success("Localização precisa capturada!");
-            },
-            (err) => { setLoadingLocation(false); toast.error("Erro no GPS."); },
-            { enableHighAccuracy: true, timeout: 10000 }
-        );
-    };
-
-    const handleSubmit = async () => {
-        if (!user) return toast.error("Faça login.");
-        if (!posto || !preco || !location) return toast.error("Preencha todos os campos.");
-        setSubmitting(true);
-        const { error } = await GiroService.insertPrecoCombustivel({
-            posto_nome: posto, latitude: location.lat, longitude: location.lon,
-            preco: parseFloat(preco), tipo_combustivel: tipo as any, user_id: user.id,
-        });
-        setSubmitting(false);
-        if (error) return toast.error("Erro ao salvar.");
-        toast.success("Preço enviado! Obrigado pela colaboração.");
-        setPosto(''); setPreco(''); setLocation(null);
-    };
-
-    return (
-        <Drawer>
-            <DrawerTrigger asChild>
-                <Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/20 rounded-xl h-12 font-bold flex items-center justify-center gap-2 transition-all active:scale-95 transform">
-                    <DollarSign className="w-5 h-5" /> 
-                    Lançar Preço
-                </Button>
-            </DrawerTrigger>
-            <DrawerContent className="dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 h-[60vh]">
-                <div className="mx-auto w-full max-w-md pb-8 px-6 space-y-6 pt-6 overflow-y-auto h-full">
-                    <div className="text-center space-y-1">
-                        <h3 className="text-2xl font-black text-gray-900 dark:text-white">Lançar Preço</h3>
-                        <p className="text-sm text-gray-500">Ajude a rapaziada de {cidade}.</p>
-                    </div>
-
-                    <div className="space-y-5">
-                        <div className="space-y-1.5">
-                            <label className="text-xs font-bold uppercase text-gray-400 tracking-wider">Posto / Bandeira</label>
-                            <Input placeholder="Ex: Shell Av. Paulista" value={posto} onChange={e => setPosto(e.target.value)} className="h-14 bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-lg font-bold rounded-xl" />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-bold uppercase text-gray-400 tracking-wider">Preço (R$)</label>
-                                <Input type="number" placeholder="5.59" value={preco} onChange={e => setPreco(e.target.value)} className="h-14 bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-xl font-black rounded-xl" />
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-bold uppercase text-gray-400 tracking-wider">Combustível</label>
-                                <select value={tipo} onChange={e => setTipo(e.target.value)} className="w-full h-14 px-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 font-bold outline-none focus:ring-2 focus:ring-emerald-500">
-                                    {TIPOS_COMBUSTIVEL.map(t => <option key={t} value={t}>{t.toUpperCase()}</option>)}
-                                </select>
-                            </div>
-                        </div>
-
-                        <Button onClick={handleGetLocation} disabled={loadingLocation || !!location} variant="outline" className={`w-full h-14 rounded-xl border-2 ${location ? 'border-emerald-500 text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 font-bold' : 'border-dashed border-gray-300 text-gray-500'}`}>
-                            {loadingLocation ? <Loader2 className="animate-spin" /> : location ? <span className="flex items-center gap-2"><Check className="w-5 h-5"/> Localização Confirmada</span> : <span className="flex items-center gap-2"><Navigation className="w-5 h-5"/> Usar Localização Atual</span>}
-                        </Button>
-
-                        <Button onClick={handleSubmit} disabled={submitting || !location} className="w-full h-16 text-lg font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl shadow-xl shadow-emerald-600/20 transition-all active:scale-95">
-                            {submitting ? <Loader2 className="animate-spin" /> : 'CONFIRMAR ENVIO'}
-                        </Button>
-                    </div>
-                </div>
-            </DrawerContent>
-        </Drawer>
-    );
-}
+const parseDurationHours = (text?: string) => {
+  if (!text) return 0;
+  let hours = 0;
+  const hourMatch = text.match(/(\d+)\s*h/);
+  const minuteMatch = text.match(/(\d+)\s*min/);
+  if (hourMatch) hours += parseInt(hourMatch[1], 10);
+  if (minuteMatch) hours += parseInt(minuteMatch[1], 10) / 60;
+  if (!hourMatch && !minuteMatch) {
+    const numeric = parseFloat(text.replace(',', '.'));
+    if (!Number.isNaN(numeric)) hours += numeric / 60;
+  }
+  return hours || 0;
+};
 
 function InsightsContent() {
   const { user } = useAuth();
+  const { profile } = useUserProfile();
+  const router = useRouter();
+  const featureFlags = useFeatureFlags();
+  const userId = user?.id ?? '';
   const [cidade, setCidade] = useState(CIDADES_PRINCIPAIS[0]);
   const [plataforma, setPlataforma] = useState<Plataforma>('Uber');
   const [insightRapido, setInsightRapido] = useState('');
   const [loadingIA, setLoadingIA] = useState(false);
-  const [clima, setClima] = useState<any>(null);
-
-  useEffect(() => {
-      if (user) {
-          GiroService.fetchUserProfile(user.id).then(({data}) => {
-              if(data?.cidade_padrao) setCidade(data.cidade_padrao);
-          });
-      }
-  }, [user]);
-
-  useEffect(() => {
-    if (cidade) {
-      fetch(`/api/weather?cidade=${cidade}`)
-        .then(res => res.json()).then(data => { if (!data.error) setClima(data); }).catch(() => {});
+  const [clima, setClima] = useState<ClimaData>(null);
+  const [iaUseCount, setIaUseCount] = useState(0);
+  const [hotspots, setHotspots] = useState<Hotspot[]>([]);
+  const [hotspotSort, setHotspotSort] = useState<'distance' | 'rating'>('distance');
+  const [hotspotFilter, setHotspotFilter] = useState<'all' | 'open'>('all');
+  const [loadingHotspots, setLoadingHotspots] = useState(false);
+  const [expandedHotspot, setExpandedHotspot] = useState<string | null>(null);
+  const [hotspotDetails, setHotspotDetails] = useState<Record<string, HotspotDetails>>({});
+  const [loadingHotspotDetail, setLoadingHotspotDetail] = useState<string | null>(null);
+  const [favoriteScenarios, setFavoriteScenarios] = useState<StoredSimuladorScenario[]>([]);
+  const [tagDialogOpen, setTagDialogOpen] = useState(false);
+  const [tagInputValue, setTagInputValue] = useState('');
+  const [tagDialogHint, setTagDialogHint] = useState('');
+  const tagResolverRef = useRef<((value?: string) => void) | null>(null);
+  const [iaError, setIaError] = useState('');
+  const [hotspotsError, setHotspotsError] = useState<string | null>(null);
+  const [gettingStartedSteps, setGettingStartedSteps] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem(GETTING_STARTED_KEY);
+      return stored ? (JSON.parse(stored) as string[]) : [];
+    } catch {
+      return [];
     }
+  });
+  const isPro = !!profile?.is_pro;
+  const missionsConfig = featureFlags.missions_ai ?? { free_limit: 3 };
+  const freeMissionLimit = missionsConfig.free_limit ?? 3;
+  const hasMissionLimit = !isPro && typeof freeMissionLimit === 'number';
+  const reachedLimit = hasMissionLimit && iaUseCount >= freeMissionLimit;
+
+  useEffect(() => {
+    if (profile?.cidade_padrao) {
+      setCidade(profile.cidade_padrao);
+    }
+  }, [profile?.cidade_padrao]);
+
+  useEffect(() => {
+    if (!userId) {
+      setIaUseCount(0);
+      return;
+    }
+
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(getUsageKey(userId));
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed.date === getTodayStamp()) {
+            setIaUseCount(parsed.count || 0);
+            return;
+          }
+        }
+      } catch {
+        // ignore parse errors
+      }
+      setIaUseCount(0);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = localStorage.getItem(GETTING_STARTED_KEY);
+      if (stored) setGettingStartedSteps(JSON.parse(stored));
+    } catch {
+      setGettingStartedSteps([]);
+    }
+  }, []);
+
+  const syncFavoriteScenarios = useCallback(async () => {
+    if (!userId) {
+      setFavoriteScenarios([]);
+      return;
+    }
+    const stored = readStoredSimuladorScenarios(userId)
+      .filter((scenario) => scenario.favorite || scenario.tag)
+      .sort((a, b) => (b.savedAt ?? 0) - (a.savedAt ?? 0));
+    setFavoriteScenarios(stored);
+    try {
+      const { data } = await fetchSimulatorFavorites(userId);
+      if (data && data.length) {
+        persistStoredSimuladorScenarios(userId, data);
+        setFavoriteScenarios(
+          data.filter((scenario) => scenario.favorite || scenario.tag).sort((a, b) => (b.savedAt ?? 0) - (a.savedAt ?? 0))
+        );
+      }
+    } catch (error) {
+      console.warn('Não foi possível sincronizar os favoritos remotos', error);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    syncFavoriteScenarios();
+  }, [syncFavoriteScenarios]);
+
+  const markGettingStartedStep = useCallback((stepId: string) => {
+    setGettingStartedSteps((prev) => {
+      if (prev.includes(stepId)) return prev;
+      const next = [...prev, stepId];
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(GETTING_STARTED_KEY, JSON.stringify(next));
+      }
+      return next;
+    });
+  }, []);
+
+  const persistScenarioFromInsights = useCallback(
+    async (scenario: StoredSimuladorScenario, successMessage: string) => {
+      if (!userId) {
+        toast.error('Não foi possível identificar o usuário para salvar o cenário.');
+        return;
+      }
+      const stored = readStoredSimuladorScenarios(userId);
+      const next = [scenario, ...stored.filter((item) => item.id !== scenario.id)];
+      persistStoredSimuladorScenarios(userId, next);
+      try {
+        await replaceSimulatorFavorites(userId, next);
+      } catch (error) {
+        console.warn('Não foi possível salvar favoritos no servidor', error);
+      }
+      syncFavoriteScenarios();
+      markGettingStartedStep('favorite');
+      toast.success(successMessage);
+    },
+    [userId, syncFavoriteScenarios, markGettingStartedStep]
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleSyncEvent = () => syncFavoriteScenarios();
+    const storageKey = userId ? `simulador_scenarios_${userId}` : null;
+    const handleStorage = (event: StorageEvent) => {
+      if (!storageKey) return;
+      if (event.key === storageKey) {
+        syncFavoriteScenarios();
+      }
+    };
+    window.addEventListener(SIMULADOR_SCENARIOS_SYNC_EVENT, handleSyncEvent);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener(SIMULADOR_SCENARIOS_SYNC_EVENT, handleSyncEvent);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [syncFavoriteScenarios, userId]);
+
+  const closeTagDialog = useCallback(() => {
+    setTagDialogOpen(false);
+    setTagInputValue('');
+    setTagDialogHint('');
+  }, []);
+
+  const resolveTagDialog = useCallback(
+    (value?: string) => {
+      if (tagResolverRef.current) {
+        tagResolverRef.current(value && value.trim() ? value.trim() : undefined);
+        tagResolverRef.current = null;
+      }
+      closeTagDialog();
+    },
+    [closeTagDialog]
+  );
+  const handleConfirmTagDialog = useCallback(() => resolveTagDialog(tagInputValue), [resolveTagDialog, tagInputValue]);
+  const handleSkipTagDialog = useCallback(() => resolveTagDialog(undefined), [resolveTagDialog]);
+
+  useEffect(() => {
+    if (!cidade) return;
+    type WeatherApiResponse = (Exclude<ClimaData, null> & { error?: undefined }) | { error: string };
+    fetch(`/api/weather?cidade=${cidade}`)
+      .then(async (res) => res.json() as Promise<WeatherApiResponse>)
+      .then((data) => {
+        if ('error' in data) return;
+        setClima(data);
+      })
+      .catch((error) => {
+        console.error(error);
+      });
   }, [cidade]);
 
+  const HOTSPOT_KEYWORDS = useMemo(() => [
+    'aeroporto',
+    'rodoviaria',
+    'ponto de taxi',
+    'shopping',
+    'hospital',
+    'estadio',
+    'terminal',
+    'rodovia',
+    'metrô',
+  ], []);
+
+  const loadHotspots = useCallback(async () => {
+    if (!userId) return;
+    const coords = CITY_COORDS[cidade] || CITY_COORDS['São Paulo'];
+    setLoadingHotspots(true);
+    setHotspotsError(null);
+    try {
+      const keywords = [...HOTSPOT_KEYWORDS].sort(() => Math.random() - 0.5).slice(0, 3);
+      const results = await Promise.all(
+        keywords.map((word) => fetchHotspots(coords.lat, coords.lng, word).catch(() => []))
+      );
+      const merged: Hotspot[] = [];
+      const seen = new Set<string>();
+      results.flat().forEach((spot) => {
+        const key = `${spot.name}-${spot.location?.lat}-${spot.location?.lng}`;
+        if (spot.location && !seen.has(key)) {
+          seen.add(key);
+          merged.push({ ...spot, category: keywords.join(', ') });
+        }
+      });
+      setHotspots(merged.slice(0, 5));
+      setHotspotsError(null);
+    } catch {
+      setHotspots([]);
+      setHotspotsError('Não foi possível carregar os hotspots agora.');
+    } finally {
+      setLoadingHotspots(false);
+    }
+  }, [userId, cidade, HOTSPOT_KEYWORDS]);
+
+  useEffect(() => {
+    if (!userId) return;
+    loadHotspots();
+    const refreshTimer = setInterval(loadHotspots, 10 * 60 * 1000);
+    return () => clearInterval(refreshTimer);
+  }, [userId, loadHotspots]);
+
+  const persistUsage = (count: number) => {
+      if (!userId || typeof window === 'undefined') return;
+      localStorage.setItem(getUsageKey(userId), JSON.stringify({ date: getTodayStamp(), count }));
+  };
+
   const handleGerar = async () => {
+    if (reachedLimit) {
+        toast.error("Limite diário de estratégias atingido. Torne-se PRO para uso ilimitado.");
+        return;
+    }
     setLoadingIA(true);
+    setIaError('');
     try {
       const response = await fetch('/api/generate-insight', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -160,8 +360,25 @@ function InsightsContent() {
       });
       const data = await response.json();
       setInsightRapido(data.insight);
-    } catch { toast.error("Erro na IA."); } 
-    finally { setLoadingIA(false); }
+      setIaError('');
+      logAnalyticsEvent(userId || undefined, 'insights_generate_plan', { cidade, plataforma, pro: isPro });
+      queueRegistroPrefill({
+        origem: 'insight',
+        cidade,
+        plataforma,
+        hint: data.insight
+      });
+      markGettingStartedStep('generate_plan');
+      const newCount = iaUseCount + 1;
+      setIaUseCount(newCount);
+      persistUsage(newCount);
+    } catch (error) {
+      console.error(error);
+      toast.error("Erro na IA.");
+      setIaError('Não foi possível gerar a missão agora.');
+    } finally {
+      setLoadingIA(false);
+    }
   };
 
   const getWeatherIcon = () => {
@@ -172,138 +389,283 @@ function InsightsContent() {
       return <Cloud className="text-gray-500 fill-gray-100" />;
   };
 
+  const getDemandHint = (details?: HotspotDetails | null) => {
+      if (!details) return '';
+      const rating = details.rating ?? 0;
+      const total = details.userRatingsTotal ?? 0;
+      if (details.openNow === false) {
+          return 'Fechado agora — monitore para reabrir e aproveitar o fluxo inicial.';
+      }
+      if (rating >= 4.6 && total > 800) {
+          return 'Muito bem avaliado e procura constante. Ótimo para aproveitar dinâmica.';
+      }
+      if (rating >= 4.2 && total > 300) {
+          return 'Bom volume de pedidos e avaliações positivas.';
+      }
+      return 'Movimento moderado — bom ponto para completar a meta.';
+  };
+
+  const requestScenarioTag = useCallback(
+    (suggestion: string) =>
+      new Promise<string | undefined>((resolve) => {
+        tagResolverRef.current = resolve;
+        setTagInputValue(suggestion);
+        setTagDialogHint(suggestion);
+        setTagDialogOpen(true);
+      }),
+    []
+  );
+
+  const handleToggleHotspot = async (spot: Hotspot) => {
+      if (!spot.placeId) return;
+      if (expandedHotspot === spot.placeId) {
+          setExpandedHotspot(null);
+          return;
+      }
+      setExpandedHotspot(spot.placeId);
+      if (hotspotDetails[spot.placeId]) return;
+      setLoadingHotspotDetail(spot.placeId);
+      try {
+          const details = await fetchHotspotDetails(spot.placeId);
+          if (details) {
+            const placeKey = spot.placeId;
+            if (placeKey) {
+              setHotspotDetails((prev) => ({ ...prev, [placeKey]: details }));
+            }
+          }
+      } catch (error) {
+          console.error(error);
+          toast.error("Não foi possível carregar os detalhes desse hotspot.");
+      } finally {
+          setLoadingHotspotDetail(null);
+      }
+  };
+
+  const handleOpenSimulator = useCallback(() => {
+    router.push('/simulador');
+  }, [router]);
+
+  const handleSendHotspotToSimulator = useCallback(
+    (spot: Hotspot) => {
+      const km = parseDistanceKm(spot.route?.distance) || 20;
+      const horas = parseDurationHours(spot.route?.durationInTraffic || spot.route?.duration) || 1.2;
+      queueSimuladorPrefill({
+        name: spot.name,
+        cidade,
+        plataforma,
+        horas: Math.max(1, Number(horas.toFixed(1))),
+        km: Math.max(10, Math.round(km)),
+        tarifaMedia: Number((26 + Math.random() * 6).toFixed(2)),
+        demanda: spot.route ? 'Alta' : 'Média',
+        hint: `Hotspot ${spot.name}`,
+      });
+      logAnalyticsEvent(userId || undefined, 'insights_send_to_simulator', {
+        source: 'hotspot',
+        cidade,
+        plataforma,
+        hotspotId: spot.placeId || spot.name,
+      });
+      markGettingStartedStep('send_to_sim');
+      handleOpenSimulator();
+    },
+    [cidade, plataforma, handleOpenSimulator, userId, markGettingStartedStep]
+  );
+
+  const handleSimulateFavorite = useCallback(
+    (scenario: StoredSimuladorScenario) => {
+      queueSimuladorPrefill({
+        name: scenario.name,
+        cidade: scenario.cidade,
+        plataforma: scenario.plataforma,
+        horas: scenario.horas,
+        km: scenario.km,
+        tarifaMedia: scenario.tarifaMedia,
+        demanda: scenario.demanda,
+        hint: scenario.tag ? `Plano favorito • ${scenario.tag}` : 'Plano favorito do Insights',
+      });
+      logAnalyticsEvent(userId || undefined, 'insights_simulate_favorite', {
+        scenarioId: scenario.id,
+        cidade: scenario.cidade,
+        plataforma: scenario.plataforma,
+      });
+      markGettingStartedStep('send_to_sim');
+      handleOpenSimulator();
+    },
+    [handleOpenSimulator, userId, markGettingStartedStep]
+  );
+
+  const handleSaveInsightPlan = useCallback(async () => {
+    if (!insightRapido) return;
+    if (!isPro) {
+      toast.error('Favoritos e etiquetas estão disponíveis no plano Pro+.');
+      router.push('/giropro-plus');
+      return;
+    }
+    const tag = await requestScenarioTag(`Plano ${cidade}`);
+    const scenario: StoredSimuladorScenario = {
+      id: `insight-${Date.now()}`,
+      name: `Plano IA - ${cidade}`,
+      cidade,
+      plataforma,
+      horas: 4,
+      km: 80,
+      tarifaMedia: 30,
+      demanda: 'Alta',
+      hint: insightRapido,
+      favorite: true,
+      tag,
+      savedAt: Date.now(),
+    };
+    await persistScenarioFromInsights(scenario, 'Plano salvo nos favoritos do simulador.');
+    logAnalyticsEvent(userId || undefined, 'insights_save_plan', { cidade, plataforma });
+  }, [cidade, plataforma, insightRapido, isPro, persistScenarioFromInsights, requestScenarioTag, router, userId]);
+
+  const handleSaveHotspotFavorite = useCallback(
+    async (spot: Hotspot) => {
+      if (!isPro) {
+        toast.error('Favoritar cenários exige o plano Pro+.');
+        router.push('/giropro-plus');
+        return;
+      }
+      const km = parseDistanceKm(spot.route?.distance) || 20;
+      const horas = parseDurationHours(spot.route?.durationInTraffic || spot.route?.duration) || 1.2;
+      const tag = await requestScenarioTag(spot.name);
+      const scenario: StoredSimuladorScenario = {
+        id: `hotspot-${spot.placeId || Date.now()}`,
+        name: spot.name,
+        cidade,
+        plataforma,
+        horas: Math.max(1, Number(horas.toFixed(1))),
+        km: Math.max(10, Math.round(km)),
+        tarifaMedia: Number((26 + Math.random() * 6).toFixed(2)),
+        demanda: spot.route ? 'Alta' : 'Média',
+        hint: `Hotspot ${spot.name}`,
+        favorite: true,
+        tag,
+        savedAt: Date.now(),
+      };
+      await persistScenarioFromInsights(scenario, 'Hotspot salvo como favorito no simulador.');
+      logAnalyticsEvent(userId || undefined, 'insights_favorite_hotspot', {
+        cidade,
+        plataforma,
+        hotspotId: spot.placeId || spot.name,
+      });
+    },
+    [cidade, plataforma, isPro, persistScenarioFromInsights, requestScenarioTag, router, userId]
+  );
+
+  const handleApplyPlan = useCallback(() => {
+    if (!insightRapido) return;
+    queueRegistroPrefill({ origem: 'insight', cidade, plataforma, hint: insightRapido });
+    toast.success('Plano enviado para o painel principal.');
+    logAnalyticsEvent(userId || undefined, 'insights_apply_plan', { cidade, plataforma });
+  }, [cidade, plataforma, insightRapido, userId]);
+
   return (
     <div className="min-h-screen bg-white dark:bg-black pb-32 font-sans selection:bg-indigo-100 dark:selection:bg-indigo-900">
       
-      {/* --- HEADER (Compacto e Clean) --- */}
-      <header className="flex justify-between items-center py-4 px-6 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-black z-20 sticky top-0">
-        <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
-                Insights
-                <Badge className="bg-orange-100 text-orange-600 hover:bg-orange-200 text-[10px] px-2 py-0.5 rounded-full font-bold tracking-wide">Beta</Badge>
-            </h1>
-        </div>
-        
-        {/* Widget Clima + Cidade */}
-        <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-900 p-1.5 pl-4 rounded-full border border-gray-100 dark:border-gray-800 shadow-sm">
-             <div className="flex items-center gap-2">
-                {getWeatherIcon()}
-                <span className="text-sm font-bold text-gray-700 dark:text-gray-200">
-                    {clima ? Math.round(clima.temp) : '--'}°C
-                </span>
-             </div>
-             <div className="h-4 w-px bg-gray-300 dark:bg-gray-700"></div>
-             <div className="relative">
-                <select 
-                    value={cidade} 
-                    onChange={(e) => setCidade(e.target.value)} 
-                    className="appearance-none bg-transparent text-xs font-bold text-gray-600 dark:text-gray-300 py-1.5 pl-2 pr-6 outline-none cursor-pointer"
-                >
-                    {CIDADES_PRINCIPAIS.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <MapPin className="w-3 h-3 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
-        </div>
-      </header>
+      <InsightsHeader
+        cidades={CIDADES_PRINCIPAIS}
+        cidade={cidade}
+        onCidadeChange={setCidade}
+        clima={clima}
+        weatherIcon={getWeatherIcon()}
+      />
 
       <main className="container max-w-7xl mx-auto px-4 py-6 md:px-6 md:py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-6 items-start">
             
-            {/* COLUNA 1: MAPA (Grande e Central) */}
-            <section className="lg:col-span-2 relative">
-                <Card className="overflow-hidden border-0 shadow-xl shadow-gray-200/50 dark:shadow-none bg-white dark:bg-gray-900 rounded-xl ring-1 ring-gray-100 dark:ring-gray-800 h-full flex flex-col">
-                    
-                    {/* Área do Mapa (Maior altura) */}
-                    <div className="relative h-[500px] md:h-[600px] w-full bg-gray-100 dark:bg-gray-950">
-                        <MapWidget cidade={cidade} />
-                        
-                        {/* Badge Radar no Topo (Flutuante) */}
-                        <div className="absolute top-4 left-4 z-[400] bg-white/90 dark:bg-gray-900/90 backdrop-blur-md px-3 py-2 rounded-lg shadow-md border border-gray-200 dark:border-gray-700 pointer-events-none">
-                            <div className="flex items-center gap-2">
-                                <Fuel className="w-4 h-4 text-orange-500" />
-                                <h3 className="text-xs font-black text-gray-800 dark:text-white uppercase tracking-wider">Radar de Preço</h3>
-                            </div>
-                        </div>
-                    </div>
+            <InsightsMapSection cidade={cidade} plataforma={plataforma} hotspots={hotspots} />
 
-                    {/* Barra de Ação (Fundo do Card) */}
-                    <div className="p-4 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800">
-                        <PriceSubmissionDrawer cidade={cidade} />
-                    </div>
-                </Card>
-            </section>
+            <InsightsGettingStarted
+              completed={gettingStartedSteps}
+              onGeneratePlan={handleGerar}
+              onOpenSimulator={handleOpenSimulator}
+              isPro={isPro}
+              onUpgrade={() => router.push('/giropro-plus')}
+            />
 
-            {/* COLUNA 2: IA COACH (Clean e Integrada) */}
-            <section className="lg:col-span-1 flex flex-col">
-                <Card className="flex-1 border-0 shadow-xl shadow-gray-200/50 dark:shadow-none bg-white dark:bg-gray-900 rounded-xl ring-1 ring-gray-100 dark:ring-gray-800 flex flex-col h-full">
-                    <CardContent className="p-6 flex flex-col flex-1">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                                <BrainCircuit className="w-5 h-5 text-gray-700 dark:text-gray-300" />
-                            </div>
-                            <div>
-                                <h3 className="font-black text-xl text-gray-900 dark:text-white">Estrategista IA</h3>
-                                <p className="text-xs text-gray-500 font-medium">Powered by Gemini</p>
-                            </div>
-                        </div>
+            <InsightsFavoriteScenarios
+              scenarios={favoriteScenarios}
+              onSimulate={handleSimulateFavorite}
+              onOpenSimulator={handleOpenSimulator}
+            />
 
-                        {/* Seleção de Plataforma (Botões discretos) */}
-                        <div className="space-y-3 mb-6">
-                            <label className="text-[10px] font-bold uppercase text-gray-400 tracking-widest">Plataforma Ativa</label>
-                            <div className="flex flex-wrap gap-2">
-                                {['Uber', '99', 'iFood', 'Rappi'].map(p => (
-                                    <button 
-                                        key={p} 
-                                        onClick={() => setPlataforma(p as any)}
-                                        className={cn(
-                                            "px-4 py-2 rounded-full text-xs font-bold transition-all",
-                                            plataforma === p 
-                                                ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20' 
-                                                : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700'
-                                        )}
-                                    >
-                                        {p}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
+            <InsightsSidebar
+              cidade={cidade}
+              plataforma={plataforma}
+              onPlatformChange={setPlataforma}
+              clima={clima}
+              isPro={isPro}
+              loadingIA={loadingIA}
+              insight={insightRapido}
+              reachedLimit={reachedLimit}
+              freeMissionLimit={freeMissionLimit}
+              iaUseCount={iaUseCount}
+              onGenerate={handleGerar}
+              onApplyNewRun={handleApplyPlan}
+              onSendToSimulator={() => {
+                if (!insightRapido) return;
+                queueSimuladorPrefill({
+                  name: `Plano IA - ${cidade}`,
+                  cidade,
+                  plataforma,
+                  horas: 4,
+                  km: 80,
+                  tarifaMedia: 30,
+                  demanda: 'Alta',
+                  hint: insightRapido,
+                });
+                toast.success('Plano enviado para o simulador.');
+                logAnalyticsEvent(userId || undefined, 'insights_send_to_simulator', {
+                  source: 'ia_card',
+                  cidade,
+                  plataforma,
+                });
+                markGettingStartedStep('send_to_sim');
+                handleOpenSimulator();
+              }}
+              onSaveFavoritePlan={handleSaveInsightPlan}
+              onUpgrade={() => router.push('/giropro-plus')}
+              iaError={iaError}
+              onRetryGenerate={handleGerar}
+            />
 
-                        {/* Área de Resposta da IA */}
-                        <div className="flex-1 bg-gray-50 dark:bg-gray-900 rounded-lg p-4 mb-6 border border-gray-200 dark:border-gray-800 overflow-y-auto scrollbar-hide flex items-center justify-center text-center min-h-[150px]">
-                            {loadingIA ? (
-                                <div className="flex flex-col items-center gap-3 text-orange-500 animate-pulse">
-                                    <Loader2 className="w-6 h-6 animate-spin" />
-                                    <p className="text-sm font-medium">Gerando estratégia...</p>
-                                </div>
-                            ) : insightRapido ? (
-                                <div className="animate-in fade-in duration-300 flex items-start text-left gap-3">
-                                    <Sparkles className="w-4 h-4 text-yellow-500 mt-1 flex-shrink-0" />
-                                    <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed font-medium">
-                                        {insightRapido}
-                                    </p>
-                                </div>
-                            ) : (
-                                <div className="h-full flex flex-col items-center justify-center text-center opacity-50 gap-3">
-                                    <Zap className="w-8 h-8 text-gray-300 dark:text-gray-700" />
-                                    <p className="text-xs font-medium max-w-[200px] text-gray-400">Peça uma análise tática.</p>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Botão de Ação */}
-                        <Button 
-                            onClick={handleGerar} 
-                            disabled={loadingIA} 
-                            className="w-full h-12 bg-orange-600 text-white hover:bg-orange-700 font-bold text-sm rounded-lg shadow-lg shadow-orange-500/20 transition-all active:scale-95 group"
-                        >
-                            {loadingIA ? <Loader2 className="animate-spin mr-2 h-5 w-5"/> : <span className="flex items-center">GERAR ESTRATÉGIA <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform"/></span>}
-                        </Button>
-                    </CardContent>
-                </Card>
-            </section>
+            <HotspotList
+              hotspots={hotspots}
+              loading={loadingHotspots}
+              expandedHotspot={expandedHotspot}
+              onToggleHotspot={handleToggleHotspot}
+              hotspotDetails={hotspotDetails}
+              loadingHotspotDetail={loadingHotspotDetail}
+              isPro={isPro}
+              onSendToSimulator={handleSendHotspotToSimulator}
+              onUpgrade={() => router.push('/giropro-plus')}
+              getDemandHint={getDemandHint}
+              sortOption={hotspotSort}
+              filterOpen={hotspotFilter}
+              onSortChange={setHotspotSort}
+              onFilterChange={setHotspotFilter}
+              onSaveFavorite={handleSaveHotspotFavorite}
+              error={hotspotsError}
+              onRetry={loadHotspots}
+            />
 
         </div>
       </main>
+      <ScenarioTagDialog
+        open={tagDialogOpen}
+        value={tagInputValue}
+        suggestion={tagDialogHint}
+        onValueChange={setTagInputValue}
+        onConfirm={handleConfirmTagDialog}
+        onSkip={handleSkipTagDialog}
+        onOpenChange={(next) => {
+          if (!next && tagDialogOpen) {
+            handleSkipTagDialog();
+          }
+        }}
+      />
     </div>
   );
 }

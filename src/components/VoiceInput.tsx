@@ -5,6 +5,13 @@ import { Mic, MicOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
+declare global {
+  interface Window {
+    webkitSpeechRecognition?: any;
+    SpeechRecognition?: any;
+  }
+}
+
 interface VoiceInputProps {
   onResult: (value: string) => void;
 }
@@ -16,12 +23,11 @@ export default function VoiceInput({ onResult }: VoiceInputProps) {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      // @ts-ignore
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      
-      if (SpeechRecognition) {
+      const SpeechRecognitionCtor: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+      if (SpeechRecognitionCtor) {
         setSupported(true);
-        const rec = new SpeechRecognition();
+        const rec = new SpeechRecognitionCtor();
         rec.continuous = false;
         rec.lang = 'pt-BR';
         rec.interimResults = false;
@@ -34,9 +40,9 @@ export default function VoiceInput({ onResult }: VoiceInputProps) {
         rec.onend = () => setIsListening(false);
 
         rec.onerror = (event: any) => {
-          console.error("Erro Voz:", event.error);
+          console.error("Erro Voz:", event?.error);
           setIsListening(false);
-          if (event.error === 'not-allowed') {
+          if (event?.error === 'not-allowed') {
             toast.error("Permita o acesso ao microfone.");
           }
         };
@@ -77,7 +83,12 @@ export default function VoiceInput({ onResult }: VoiceInputProps) {
   const handleMicClick = (e: React.MouseEvent) => {
     e.preventDefault(); // Evita submit acidental de formulários
     if (!supported) return toast.error("Seu navegador não suporta comando de voz.");
-    
+
+    if (!recognition) {
+      toast.error('Reconhecimento de voz não inicializado.');
+      return;
+    }
+
     if (isListening) recognition.stop();
     else recognition.start();
   };

@@ -20,6 +20,7 @@ export const GiroFormSchema = z.object({
   outros_gastos: z.number().min(0, "Gastos não podem ser negativos.").default(0),
   tipo_combustivel: z.enum(["gasolina", "etanol", "diesel", "eletrico"]).default("gasolina"),
   cidade: z.string().optional(),
+  depreciacao_por_km: z.number().min(0).optional(),
   // Campos opcionais para ID de usuário em contextos de banco de dados
   user_id: z.string().optional(),
 });
@@ -66,7 +67,8 @@ export function calculateGiroPro(data: GiroInput): GiroResult {
     consumo_medio, 
     valor_combustivel, 
     comissao_app, 
-    outros_gastos 
+    outros_gastos,
+    depreciacao_por_km 
   } = data;
   
   // 1. Custo Energia/Combustível
@@ -74,12 +76,8 @@ export function calculateGiroPro(data: GiroInput): GiroResult {
   const unidades_gastas = km_rodados / consumo_medio; // Litros ou kWh
   const custo_combustivel = unidades_gastas * valor_combustivel;
   
-  // 2. Depreciação (Busca do LocalStorage definida na FIPE Calculator)
-  // Fallback para 0 se não tiver calculado ainda
-  let dep_por_km = 0;
-  if (typeof window !== 'undefined') {
-      dep_por_km = parseFloat(localStorage.getItem('custoDepreciacao') || '0.00');
-  }
+  // 2. Depreciação persistida
+  const dep_por_km = depreciacao_por_km ?? 0;
   const custo_depreciacao = dep_por_km * km_rodados;
   
   // 3. Taxas e Outros
@@ -129,7 +127,7 @@ export function calcularCustoPorKm(dados: DadosCusto): ResultadoCusto {
     comparacaoFlex = {
       gasolina: custoGasolina,
       etanol: custoEtanol,
-      melhorOpcao: custoEtanol < custoGasolina ? 'Etanol' : 'Gasolina',
+      melhorOpcao: (custoEtanol < custoGasolina ? 'Etanol' : 'Gasolina') as 'Gasolina' | 'Etanol',
     };
   }
 
